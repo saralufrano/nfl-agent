@@ -2,7 +2,7 @@ export type Team = {
   name: string;
   abbreviation: string;
   score: number | null;
-  spread: string;
+  spread: number | null;
   color: string;
 };
 
@@ -15,6 +15,8 @@ export type Game = {
   quarters: Quarter[];
   offensivePoints: TeamPointTotals;
   defensivePoints: TeamPointTotals;
+  completed: boolean;
+  oddsProvider: string | null;
 };
 
 export type WeekData = {
