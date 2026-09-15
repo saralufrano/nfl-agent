@@ -19,7 +19,7 @@ function findPreviousGame(week: WeekData | undefined, abbreviation: string): Gam
   return week?.games.find((game) => game.teams.some((team) => team.abbreviation === abbreviation));
 }
 
-function PreviousWeekCard({
+function PreviousWeekGame({
   previousWeek,
   abbreviation,
 }: {
@@ -27,53 +27,79 @@ function PreviousWeekCard({
   abbreviation: string;
 }) {
   const game = findPreviousGame(previousWeek, abbreviation);
+
   if (!game) {
-    return <div className="previous-card empty-previous-card">No Week {previousWeek.number} game found.</div>;
+    return <div className="comparison-missing">No Week {previousWeek.number} game found for {abbreviation}.</div>;
   }
 
-  const teamIndex = game.teams.findIndex((team) => team.abbreviation === abbreviation);
-  const opponentIndex = teamIndex === 0 ? 1 : 0;
-  const team = game.teams[teamIndex];
-  const opponent = game.teams[opponentIndex];
-
   return (
-    <article className="previous-card">
-      <div className="previous-card-header">
-        <div className="previous-team-title">
-          <TeamBadge team={team} />
-          <div>
-            <strong>{team.name}</strong>
-            <span>
-              vs {opponent.name} · {displayValue(team.score)}–{displayValue(opponent.score)}
-            </span>
-          </div>
-        </div>
-        <span className="previous-week-label">Week {previousWeek.number}</span>
+    <article className="comparison-game">
+      <div className="comparison-caption">
+        <strong>{abbreviation}&apos;s Week {previousWeek.number} game</strong>
       </div>
 
-      <div className="previous-quarter-grid">
-        {game.quarters.map((quarter, quarterIndex) => (
-          <div className="previous-quarter" key={`${game.id}-${abbreviation}-q${quarterIndex + 1}`}>
-            <strong>Q{quarterIndex + 1}</strong>
-            <div>
-              {quarter[teamIndex].length
-                ? quarter[teamIndex].map((play, playIndex) => (
-                    <span key={`${play}-${playIndex}`}>{play}</span>
-                  ))
-                : <span>—</span>}
+      <div className="comparison-grid comparison-header">
+        <div>Teams</div>
+        <div>Score</div>
+        <div>Q1</div>
+        <div>Q2</div>
+        <div>Q3</div>
+        <div>Q4</div>
+        <div>Offensive Points</div>
+        <div>Defensive Points</div>
+      </div>
+
+      <div className="comparison-grid comparison-row">
+        <div className="team-stack">
+          {game.teams.map((team) => (
+            <div
+              className={`team-line ${team.abbreviation === abbreviation ? "comparison-team-focus" : ""}`}
+              key={team.abbreviation}
+            >
+              <TeamBadge team={team} />
+              <strong>{team.name}</strong>
             </div>
+          ))}
+        </div>
+
+        <div className="value-stack score-stack">
+          {game.teams.map((team) => (
+            <strong key={team.abbreviation}>{displayValue(team.score)}</strong>
+          ))}
+        </div>
+
+        {game.quarters.map((teamPlays, quarterIndex) => (
+          <div className="quarter-box" key={`${game.id}-${abbreviation}-q${quarterIndex + 1}`}>
+            {teamPlays.map((plays, teamIndex) => (
+              <div className="quarter-team-block" key={`${game.id}-${abbreviation}-q${quarterIndex + 1}-team${teamIndex}`}>
+                {plays.length ? (
+                  plays.map((play, playIndex) => (
+                    <div className="play-line" key={`${play}-${playIndex}`}>
+                      {play}
+                    </div>
+                  ))
+                ) : (
+                  <div className="play-line">—</div>
+                )}
+              </div>
+            ))}
           </div>
         ))}
-      </div>
 
-      <div className="previous-totals">
-        <div>
-          <span>Offense</span>
-          <strong>{displayValue(game.offensivePoints[teamIndex])}</strong>
+        <div className="total-box offense-total">
+          {game.offensivePoints.map((points, teamIndex) => (
+            <div className="total-team-block" key={`${game.id}-${abbreviation}-offense-${teamIndex}`}>
+              {displayValue(points)}
+            </div>
+          ))}
         </div>
-        <div>
-          <span>Defense</span>
-          <strong>{displayValue(game.defensivePoints[teamIndex])}</strong>
+
+        <div className="total-box defense-total">
+          {game.defensivePoints.map((points, teamIndex) => (
+            <div className="total-team-block" key={`${game.id}-${abbreviation}-defense-${teamIndex}`}>
+              {displayValue(points)}
+            </div>
+          ))}
         </div>
       </div>
     </article>
@@ -209,7 +235,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                 </div>
 
                 {canCompare && previousWeek && (
-                  <div className="comparison-section">
+                  <div className="comparison-drawer">
                     <button
                       className="comparison-toggle"
                       type="button"
@@ -226,9 +252,12 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                     </button>
 
                     {comparisonOpen && (
-                      <div className="comparison-panel">
+                      <div>
+                        <div className="comparison-drawer-title">
+                          How each team did against its Week {previousWeek.number} opponent
+                        </div>
                         {game.teams.map((team) => (
-                          <PreviousWeekCard
+                          <PreviousWeekGame
                             key={`${game.id}-${team.abbreviation}-previous`}
                             previousWeek={previousWeek}
                             abbreviation={team.abbreviation}
