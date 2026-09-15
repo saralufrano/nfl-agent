@@ -164,18 +164,24 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   const hasPreviousWeek = weekIndex > 0;
   const hasNextWeek = weekIndex < weeks.length - 1;
 
-  function savePick(game: Game, team: Team) {
+  function togglePick(game: Game, team: Team) {
     if (game.completed || team.spread === null) return;
 
-    const pick: PickRecord = {
-      teamAbbreviation: team.abbreviation,
-      lockedSpread: team.spread,
-      week: week.number,
-      pickedAt: new Date().toISOString(),
-    };
-
     setPicks((current) => {
-      const next = { ...current, [game.id]: pick };
+      const next = { ...current };
+      const existing = current[game.id];
+
+      if (existing?.teamAbbreviation === team.abbreviation) {
+        delete next[game.id];
+      } else {
+        next[game.id] = {
+          teamAbbreviation: team.abbreviation,
+          lockedSpread: team.spread,
+          week: week.number,
+          pickedAt: new Date().toISOString(),
+        };
+      }
+
       try {
         window.localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(next));
       } catch {
@@ -273,12 +279,11 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                       return (
                         <label className="pick-control" key={team.abbreviation}>
                           <input
-                            type="radio"
-                            name={`pick-${game.id}`}
+                            type="checkbox"
                             checked={selected}
                             disabled={game.completed || team.spread === null}
-                            onChange={() => savePick(game, team)}
-                            aria-label={`Pick ${team.name} ${formatSpread(team.spread)}`}
+                            onChange={() => togglePick(game, team)}
+                            aria-label={`${selected ? "Remove pick" : "Pick"} ${team.name} ${formatSpread(team.spread)}`}
                           />
                           {selected && (
                             <span className="pick-detail">
