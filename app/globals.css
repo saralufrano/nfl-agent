@@ -105,8 +105,8 @@ body {
 
 .tracker-grid {
   display: grid;
-  grid-template-columns: 220px 90px 110px 105px repeat(4, minmax(145px, 1fr)) 160px 160px;
-  min-width: 1500px;
+  grid-template-columns: 220px 90px 110px 105px repeat(5, minmax(145px, 1fr)) 160px 160px;
+  min-width: 1645px;
 }
 
 .header-row {
@@ -278,7 +278,7 @@ body {
 }
 
 .comparison-drawer {
-  min-width: 1500px;
+  min-width: 1645px;
   padding: 18px 24px 24px;
   border-bottom: 1px solid var(--line);
   background: #f4f7fb;
@@ -317,8 +317,8 @@ body {
 
 .comparison-grid {
   display: grid;
-  grid-template-columns: 220px 90px repeat(4, minmax(145px, 1fr)) 160px 160px;
-  min-width: 1200px;
+  grid-template-columns: 220px 90px repeat(5, minmax(145px, 1fr)) 160px 160px;
+  min-width: 1345px;
 }
 
 .comparison-header {
