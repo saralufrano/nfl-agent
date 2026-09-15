@@ -1,7 +1,18 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Game, Team, WeekData } from "@/lib/nfl-types";
+
+const PICKS_STORAGE_KEY = "nfl-game-tracker-picks-v1";
+
+type PickRecord = {
+  teamAbbreviation: string;
+  lockedSpread: number;
+  week: number;
+  pickedAt: string;
+};
+
+type PickGrade = "win" | "loss" | "push" | null;
 
 function TeamBadge({ team }: { team: Team }) {
   return (
@@ -15,8 +26,31 @@ function displayValue(value: number | null) {
   return value === null ? "—" : value;
 }
 
+function formatSpread(value: number | null) {
+  if (value === null) return "—";
+  if (value === 0) return "PK";
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
 function periodLabel(periodIndex: number) {
   return periodIndex === 4 ? "OT" : `Q${periodIndex + 1}`;
+}
+
+function gradePick(game: Game, pick: PickRecord | undefined): PickGrade {
+  if (!pick || !game.completed) return null;
+
+  const pickedIndex = game.teams.findIndex((team) => team.abbreviation === pick.teamAbbreviation);
+  if (pickedIndex === -1) return null;
+
+  const opponentIndex = pickedIndex === 0 ? 1 : 0;
+  const pickedScore = game.teams[pickedIndex].score;
+  const opponentScore = game.teams[opponentIndex].score;
+  if (pickedScore === null || opponentScore === null) return null;
+
+  const adjustedScore = pickedScore + pick.lockedSpread;
+  if (adjustedScore > opponentScore) return "win";
+  if (adjustedScore < opponentScore) return "loss";
+  return "push";
 }
 
 function findPreviousGame(week: WeekData | undefined, abbreviation: string): Game | undefined {
@@ -113,13 +147,43 @@ function PreviousWeekGame({
 
 export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   const [weekIndex, setWeekIndex] = useState(0);
-  const [picks, setPicks] = useState<Record<string, string>>({});
+  const [picks, setPicks] = useState<Record<string, PickRecord>>({});
   const [expandedComparisons, setExpandedComparisons] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(PICKS_STORAGE_KEY);
+      if (saved) setPicks(JSON.parse(saved) as Record<string, PickRecord>);
+    } catch {
+      // A broken browser-storage entry should never block the tracker from loading.
+    }
+  }, []);
 
   const week = weeks[weekIndex];
   const previousWeek = weekIndex > 0 ? weeks[weekIndex - 1] : undefined;
   const hasPreviousWeek = weekIndex > 0;
   const hasNextWeek = weekIndex < weeks.length - 1;
+
+  function savePick(game: Game, team: Team) {
+    if (game.completed || team.spread === null) return;
+
+    const pick: PickRecord = {
+      teamAbbreviation: team.abbreviation,
+      lockedSpread: team.spread,
+      week: week.number,
+      pickedAt: new Date().toISOString(),
+    };
+
+    setPicks((current) => {
+      const next = { ...current, [game.id]: pick };
+      try {
+        window.localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Keep the in-memory pick even if browser storage is unavailable.
+      }
+      return next;
+    });
+  }
 
   if (!week) {
     return <main className="tracker-shell">No NFL data available.</main>;
@@ -171,6 +235,8 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
           {week.games.map((game) => {
             const canCompare = week.status === "Upcoming" && Boolean(previousWeek);
             const comparisonOpen = Boolean(expandedComparisons[game.id]);
+            const savedPick = picks[game.id];
+            const pickGrade = gradePick(game, savedPick);
 
             return (
               <Fragment key={game.id}>
@@ -190,24 +256,41 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                     ))}
                   </div>
 
-                  <div className="value-stack">
+                  <div className="value-stack spread-stack">
                     {game.teams.map((team) => (
-                      <span key={team.abbreviation}>{team.spread}</span>
+                      <span
+                        key={team.abbreviation}
+                        title={game.oddsProvider ? `Source: ${game.oddsProvider}` : undefined}
+                      >
+                        {formatSpread(team.spread)}
+                      </span>
                     ))}
                   </div>
 
                   <div className="value-stack pick-stack">
-                    {game.teams.map((team) => (
-                      <label className="pick-control" key={team.abbreviation}>
-                        <input
-                          type="radio"
-                          name={`pick-${game.id}`}
-                          checked={picks[game.id] === team.abbreviation}
-                          onChange={() => setPicks((current) => ({ ...current, [game.id]: team.abbreviation }))}
-                          aria-label={`Pick ${team.name}`}
-                        />
-                      </label>
-                    ))}
+                    {game.teams.map((team) => {
+                      const selected = savedPick?.teamAbbreviation === team.abbreviation;
+                      return (
+                        <label className="pick-control" key={team.abbreviation}>
+                          <input
+                            type="radio"
+                            name={`pick-${game.id}`}
+                            checked={selected}
+                            disabled={game.completed || team.spread === null}
+                            onChange={() => savePick(game, team)}
+                            aria-label={`Pick ${team.name} ${formatSpread(team.spread)}`}
+                          />
+                          {selected && (
+                            <span className="pick-detail">
+                              Locked {formatSpread(savedPick.lockedSpread)}
+                              {pickGrade === "win" && <strong className="pick-result pick-win"> ✓ Win</strong>}
+                              {pickGrade === "loss" && <strong className="pick-result pick-loss"> ✕ Loss</strong>}
+                              {pickGrade === "push" && <strong className="pick-result pick-push"> • Push</strong>}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
                   </div>
 
                   {game.quarters.map((teamPlays, periodIndex) => (
@@ -283,7 +366,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
         <span>NFL Game Tracker</span>
         <span>Work in progress</span>
         <span>Go Niners ❤️</span>
-        <span className="footer-note">Live scores and scoring plays from ESPN.</span>
+        <span className="footer-note">Live NFL data + ESPN odds. Picks are saved in this browser.</span>
       </footer>
     </main>
   );
