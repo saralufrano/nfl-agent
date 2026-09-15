@@ -3,6 +3,7 @@ import type { Game, Quarter, Team, WeekData } from "@/lib/nfl-types";
 const ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 const ESPN_SUMMARY = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary";
 const SEASON = 2026;
+const PERIOD_COUNT = 5;
 
 type EspnLineScore = {
   value?: number;
@@ -88,21 +89,21 @@ function normalizeTeam(competitor: EspnCompetitor, completed: boolean): Team {
 }
 
 function competitorLineScores(competitor: EspnCompetitor) {
-  return [0, 1, 2, 3].map((quarterIndex) => competitor.linescores?.[quarterIndex]?.value ?? 0);
+  return Array.from({ length: PERIOD_COUNT }, (_, periodIndex) => competitor.linescores?.[periodIndex]?.value ?? 0);
 }
 
 function fallbackQuarterBlocks(
   teams: [EspnCompetitor, EspnCompetitor],
   completed: boolean,
-): [Quarter, Quarter, Quarter, Quarter] {
-  return [0, 1, 2, 3].map((quarterIndex) => {
+): Quarter[] {
+  return Array.from({ length: PERIOD_COUNT }, (_, periodIndex) => {
     if (!completed) return [[], []] as Quarter;
 
     return teams.map((team) => {
-      const value = team.linescores?.[quarterIndex]?.value ?? 0;
+      const value = team.linescores?.[periodIndex]?.value ?? 0;
       return value > 0 ? [`${value} pts`] : [];
     }) as Quarter;
-  }) as [Quarter, Quarter, Quarter, Quarter];
+  });
 }
 
 function normalizeGame(event: EspnEvent): NormalizedGame | null {
@@ -202,8 +203,6 @@ function classifyScoringPlay(
   const text = scoringText(play);
   const prefix = `${points} `;
 
-  // Conversion attempts are not touchdowns. A blocked/missed PAT is zero points and
-  // never reaches this function. A returned conversion is worth two points.
   if (points <= 2 && (text.includes("extra point") || text.includes("pat"))) {
     if (points === 2 && (text.includes("return") || text.includes("blocked"))) {
       return { label: `${prefix}Def. PAT Return`, bucket: "defense" };
@@ -280,23 +279,12 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
     const scoringPlays = summary.scoringPlays || [];
     if (!scoringPlays.length) return normalized.game;
 
-    const quarters: [Quarter, Quarter, Quarter, Quarter] = [
-      [[], []],
-      [[], []],
-      [[], []],
-      [[], []],
-    ];
-
+    const quarters: Quarter[] = Array.from({ length: PERIOD_COUNT }, () => [[], []] as Quarter);
     const teamTotals: [PointTotals, PointTotals] = [
       { offense: 0, defense: 0 },
       { offense: 0, defense: 0 },
     ];
-    const quarterScoredPoints = [
-      [0, 0],
-      [0, 0],
-      [0, 0],
-      [0, 0],
-    ];
+    const quarterScoredPoints = Array.from({ length: PERIOD_COUNT }, () => [0, 0]);
 
     let previousScore: [number, number] = [0, 0];
 
@@ -304,7 +292,7 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
       const quarterNumber = play.period?.number;
       const snapshot = scoreSnapshot(play);
 
-      if (!quarterNumber || quarterNumber < 1 || quarterNumber > 4) {
+      if (!quarterNumber || quarterNumber < 1 || quarterNumber > PERIOD_COUNT) {
         if (snapshot) previousScore = snapshot;
         continue;
       }
@@ -318,7 +306,6 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
       const points = pointsFromScoreProgress(play, teamIndex, previousScore);
       if (snapshot) previousScore = snapshot;
 
-      // Missed/blocked conversions that did not change the score are intentionally omitted.
       if (points <= 0) continue;
 
       const quarterIndex = quarterNumber - 1;
@@ -328,10 +315,7 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
       addPoints(teamTotals[teamIndex], classified.bucket, points);
     }
 
-    // QA/reconciliation guard: the scoreboard quarter totals are authoritative. If ESPN's
-    // scoring-play feed omitted a scoring event, make the missing points visible instead of
-    // silently showing totals that do not add up to the real score.
-    for (let quarterIndex = 0; quarterIndex < 4; quarterIndex += 1) {
+    for (let quarterIndex = 0; quarterIndex < PERIOD_COUNT; quarterIndex += 1) {
       for (let teamIndex = 0; teamIndex < 2; teamIndex += 1) {
         const target = normalized.lineScores[teamIndex][quarterIndex] ?? 0;
         const accounted = quarterScoredPoints[quarterIndex][teamIndex];
@@ -345,7 +329,6 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
       }
     }
 
-    // Final game-level guard. This should normally be zero after quarter reconciliation.
     for (let teamIndex = 0; teamIndex < 2; teamIndex += 1) {
       const finalScore = normalized.game.teams[teamIndex].score ?? 0;
       const accounted = teamTotals[teamIndex].offense + teamTotals[teamIndex].defense;
