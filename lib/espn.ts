@@ -196,12 +196,19 @@ function pointsFromScoreProgress(
   return delta > 0 ? delta : fallbackPoints(play);
 }
 
+function touchdownConversionNote(points: number) {
+  if (points === 8) return " (+2PT)";
+  if (points === 6) return " (no conversion)";
+  return "";
+}
+
 function classifyScoringPlay(
   play: EspnScoringPlay,
   points: number,
 ): { label: string; bucket: ScoreBucket } {
   const text = scoringText(play);
   const prefix = `${points} `;
+  const conversionNote = touchdownConversionNote(points);
 
   if (points <= 2 && (text.includes("extra point") || text.includes("pat"))) {
     if (points === 2 && (text.includes("return") || text.includes("blocked"))) {
@@ -219,15 +226,15 @@ function classifyScoringPlay(
   }
 
   if ((text.includes("interception") || text.includes("pick six") || text.includes("pick-six")) && text.includes("touchdown")) {
-    return { label: `${prefix}Def. TD (INT)`, bucket: "defense" };
+    return { label: `${prefix}Def. TD (INT)${conversionNote}`, bucket: "defense" };
   }
 
   if (text.includes("fumble") && text.includes("touchdown")) {
-    return { label: `${prefix}Def. TD (Fum)`, bucket: "defense" };
+    return { label: `${prefix}Def. TD (Fum)${conversionNote}`, bucket: "defense" };
   }
 
   if (text.includes("blocked") && text.includes("touchdown") && points >= 6) {
-    return { label: `${prefix}Def. TD (Block)`, bucket: "defense" };
+    return { label: `${prefix}Def. TD (Block)${conversionNote}`, bucket: "defense" };
   }
 
   if (text.includes("safety")) {
@@ -235,7 +242,7 @@ function classifyScoringPlay(
   }
 
   if ((text.includes("kickoff return") || text.includes("punt return")) && text.includes("touchdown")) {
-    return { label: `${prefix}ST TD Return`, bucket: "offense" };
+    return { label: `${prefix}ST TD Return${conversionNote}`, bucket: "offense" };
   }
 
   if (text.includes("field goal")) {
@@ -243,18 +250,18 @@ function classifyScoringPlay(
   }
 
   if ((text.includes("rushing touchdown") || text.includes("rush") || text.includes(" yd run")) && text.includes("touchdown")) {
-    return { label: `${prefix}Off. TD Run`, bucket: "offense" };
+    return { label: `${prefix}Off. TD Run${conversionNote}`, bucket: "offense" };
   }
 
   if (
     (text.includes("passing touchdown") || text.includes("pass") || text.includes(" yd pass")) &&
     text.includes("touchdown")
   ) {
-    return { label: `${prefix}Off. TD Pass`, bucket: "offense" };
+    return { label: `${prefix}Off. TD Pass${conversionNote}`, bucket: "offense" };
   }
 
   if (text.includes("touchdown") || points >= 6) {
-    return { label: `${prefix}Off. TD`, bucket: "offense" };
+    return { label: `${prefix}Off. TD${conversionNote}`, bucket: "offense" };
   }
 
   return { label: `${prefix}${play.type?.text || "Score"}`.trim(), bucket: "offense" };
