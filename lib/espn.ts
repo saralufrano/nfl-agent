@@ -62,18 +62,26 @@ type EspnSummary = {
 
 type ScoreBucket = "offense" | "defense" | "special";
 
-type LastTouchdown = {
-  quarterIndex: number;
-  teamIndex: number;
+type PointTotals = {
+  offense: number;
+  defense: number;
+};
+
+type TouchdownRef = {
   playIndex: number;
   bucket: ScoreBucket;
   points: number;
+};
+
+type LastTouchdown = TouchdownRef & {
+  quarterIndex: number;
 };
 
 type NormalizedGame = {
   game: Game;
   completed: boolean;
   teamIds: [string | undefined, string | undefined];
+  lineScores: [number[], number[]];
 };
 
 function normalizeTeam(competitor: EspnCompetitor, completed: boolean): Team {
@@ -85,6 +93,10 @@ function normalizeTeam(competitor: EspnCompetitor, completed: boolean): Team {
     spread: "—",
     color: rawColor.startsWith("#") ? rawColor : `#${rawColor}`,
   };
+}
+
+function competitorLineScores(competitor: EspnCompetitor) {
+  return [0, 1, 2, 3].map((quarterIndex) => competitor.linescores?.[quarterIndex]?.value ?? 0);
 }
 
 function fallbackQuarterBlocks(
@@ -118,11 +130,12 @@ function normalizeGame(event: EspnEvent): NormalizedGame | null {
       id: event.id,
       teams: [normalizeTeam(away, completed), normalizeTeam(home, completed)],
       quarters: fallbackQuarterBlocks(orderedTeams, completed),
-      offensivePoints: null,
-      defensivePoints: null,
+      offensivePoints: [null, null],
+      defensivePoints: [null, null],
     },
     completed,
     teamIds: [away.team?.id, home.team?.id],
+    lineScores: [competitorLineScores(away), competitorLineScores(home)],
   };
 }
 
@@ -211,14 +224,33 @@ function classifyScoringPlay(play: EspnScoringPlay): { label: string; bucket: Sc
   return { label: `${prefix}${play.type?.text || "Score"}`.trim(), bucket: "offense", isTouchdown: false };
 }
 
-function addPoints(totals: { offense: number; defense: number }, bucket: ScoreBucket, points: number) {
+function addPoints(totals: PointTotals, bucket: ScoreBucket, points: number) {
   if (bucket === "defense") totals.defense += points;
   if (bucket === "offense") totals.offense += points;
 }
 
 function bumpMergedTouchdownLabel(label: string, points: number, twoPoint: boolean) {
-  const rest = label.replace(/^\d+\s+/, "");
+  const rest = label.replace(/^\d+\s+/, "").replace(/ \+ 2PT$/, "");
   return `${points} ${rest}${twoPoint ? " + 2PT" : ""}`;
+}
+
+function addMissingConversion(
+  quarters: [Quarter, Quarter, Quarter, Quarter],
+  teamTotals: [PointTotals, PointTotals],
+  quarterIndex: number,
+  teamIndex: number,
+  touchdown: TouchdownRef,
+  points: number,
+  twoPoint: boolean,
+) {
+  const currentLabel = quarters[quarterIndex][teamIndex][touchdown.playIndex];
+  touchdown.points += points;
+  quarters[quarterIndex][teamIndex][touchdown.playIndex] = bumpMergedTouchdownLabel(
+    currentLabel,
+    touchdown.points,
+    twoPoint,
+  );
+  addPoints(teamTotals[teamIndex], touchdown.bucket, points);
 }
 
 async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game> {
@@ -242,7 +274,22 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
       [[], []],
     ];
 
-    const topTeamTotals = { offense: 0, defense: 0 };
+    const teamTotals: [PointTotals, PointTotals] = [
+      { offense: 0, defense: 0 },
+      { offense: 0, defense: 0 },
+    ];
+    const quarterScoredPoints = [
+      [0, 0],
+      [0, 0],
+      [0, 0],
+      [0, 0],
+    ];
+    const touchdownRefs: TouchdownRef[][][] = [
+      [[], []],
+      [[], []],
+      [[], []],
+      [[], []],
+    ];
     const lastTouchdownByTeam = new Map<number, LastTouchdown>();
 
     for (const play of scoringPlays) {
@@ -265,34 +312,63 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
           isTwoPoint(play),
         );
         previousTouchdown.points = mergedPoints;
-
-        if (teamIndex === 0) addPoints(topTeamTotals, previousTouchdown.bucket, points);
+        quarterScoredPoints[quarterIndex][teamIndex] += points;
+        addPoints(teamTotals[teamIndex], previousTouchdown.bucket, points);
         continue;
       }
 
       const classified = classifyScoringPlay(play);
       const playIndex = quarters[quarterIndex][teamIndex].push(classified.label) - 1;
+      quarterScoredPoints[quarterIndex][teamIndex] += points;
+      addPoints(teamTotals[teamIndex], classified.bucket, points);
 
       if (classified.isTouchdown) {
-        lastTouchdownByTeam.set(teamIndex, {
-          quarterIndex,
-          teamIndex,
+        const touchdown: TouchdownRef = {
           playIndex,
           bucket: classified.bucket,
           points,
+        };
+        touchdownRefs[quarterIndex][teamIndex].push(touchdown);
+        lastTouchdownByTeam.set(teamIndex, {
+          ...touchdown,
+          quarterIndex,
         });
       } else {
         lastTouchdownByTeam.delete(teamIndex);
       }
+    }
 
-      if (teamIndex === 0) addPoints(topTeamTotals, classified.bucket, points);
+    // ESPN's scoring-play feed sometimes omits PATs even though the scoreboard quarter
+    // totals include them. Reconcile the classified plays against the authoritative
+    // quarter total so a 6-point TD becomes the 7-point score the user actually saw.
+    for (let quarterIndex = 0; quarterIndex < 4; quarterIndex += 1) {
+      for (let teamIndex = 0; teamIndex < 2; teamIndex += 1) {
+        const target = normalized.lineScores[teamIndex][quarterIndex] ?? 0;
+        let missingPoints = target - quarterScoredPoints[quarterIndex][teamIndex];
+        if (missingPoints <= 0) continue;
+
+        const sixPointTouchdowns = touchdownRefs[quarterIndex][teamIndex].filter((touchdown) => touchdown.points === 6);
+
+        if (missingPoints === 2 && sixPointTouchdowns.length === 1) {
+          addMissingConversion(quarters, teamTotals, quarterIndex, teamIndex, sixPointTouchdowns[0], 2, true);
+          quarterScoredPoints[quarterIndex][teamIndex] += 2;
+          continue;
+        }
+
+        for (const touchdown of sixPointTouchdowns) {
+          if (missingPoints <= 0) break;
+          addMissingConversion(quarters, teamTotals, quarterIndex, teamIndex, touchdown, 1, false);
+          quarterScoredPoints[quarterIndex][teamIndex] += 1;
+          missingPoints -= 1;
+        }
+      }
     }
 
     return {
       ...normalized.game,
       quarters,
-      offensivePoints: topTeamTotals.offense,
-      defensivePoints: topTeamTotals.defense,
+      offensivePoints: [teamTotals[0].offense, teamTotals[1].offense],
+      defensivePoints: [teamTotals[0].defense, teamTotals[1].defense],
     };
   } catch {
     return normalized.game;
