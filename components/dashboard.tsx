@@ -1,127 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-type Team = {
-  name: string;
-  abbreviation: string;
-  score: number | null;
-  spread: string;
-  color: string;
-};
-
-type Quarter = [string[], string[]];
-
-type Game = {
-  id: string;
-  teams: [Team, Team];
-  quarters: [Quarter, Quarter, Quarter, Quarter];
-  offensivePoints: number | null;
-  defensivePoints: number | null;
-};
-
-type WeekData = {
-  number: number;
-  status: "Completed" | "Upcoming";
-  games: Game[];
-};
-
-const emptyQuarters: [Quarter, Quarter, Quarter, Quarter] = [
-  [[], []],
-  [[], []],
-  [[], []],
-  [[], []],
-];
-
-const weeks: WeekData[] = [
-  {
-    number: 1,
-    status: "Completed",
-    games: [
-      {
-        id: "w1-sf-la",
-        teams: [
-          { name: "49ers", abbreviation: "SF", score: 28, spread: "-3", color: "#aa0000" },
-          { name: "Rams", abbreviation: "LA", score: 7, spread: "+3", color: "#003594" },
-        ],
-        quarters: [
-          [["7 Off. TD Pass"], []],
-          [["7 Off. TD Run"], ["7 Off. TD Pass"]],
-          [["7 Def. TD (INT)"], []],
-          [["7 Off. TD Pass"], []],
-        ],
-        offensivePoints: 28,
-        defensivePoints: 7,
-      },
-      {
-        id: "w1-dal-nyg",
-        teams: [
-          { name: "Cowboys", abbreviation: "DAL", score: 28, spread: "-3", color: "#041e42" },
-          { name: "Giants", abbreviation: "NYG", score: 7, spread: "+3", color: "#0b2265" },
-        ],
-        quarters: [
-          [["7 Off. TD Pass"], []],
-          [["7 Off. TD Run"], ["7 Off. TD Pass"]],
-          [["7 Off. TD Pass"], []],
-          [["7 Def. TD (Fum)"], []],
-        ],
-        offensivePoints: 28,
-        defensivePoints: 7,
-      },
-      {
-        id: "w1-kc-bal",
-        teams: [
-          { name: "Chiefs", abbreviation: "KC", score: 27, spread: "-3", color: "#e31837" },
-          { name: "Ravens", abbreviation: "BAL", score: 20, spread: "+3", color: "#241773" },
-        ],
-        quarters: [
-          [["7 Off. TD Pass"], ["7 Off. TD Run"]],
-          [["7 Off. TD Run"], ["3 Kick FG"]],
-          [["7 Off. TD Pass"], ["7 Off. TD Pass"]],
-          [["6 Kick FG ×2"], ["3 Kick FG"]],
-        ],
-        offensivePoints: 35,
-        defensivePoints: 0,
-      },
-    ],
-  },
-  {
-    number: 2,
-    status: "Upcoming",
-    games: [
-      {
-        id: "w2-det-buf",
-        teams: [
-          { name: "Lions", abbreviation: "DET", score: null, spread: "+3", color: "#0076b6" },
-          { name: "Bills", abbreviation: "BUF", score: null, spread: "-3", color: "#00338d" },
-        ],
-        quarters: emptyQuarters,
-        offensivePoints: null,
-        defensivePoints: null,
-      },
-      {
-        id: "w2-phi-ten",
-        teams: [
-          { name: "Eagles", abbreviation: "PHI", score: null, spread: "-4", color: "#004c54" },
-          { name: "Titans", abbreviation: "TEN", score: null, spread: "+4", color: "#4b92db" },
-        ],
-        quarters: emptyQuarters,
-        offensivePoints: null,
-        defensivePoints: null,
-      },
-      {
-        id: "w2-mia-sf",
-        teams: [
-          { name: "Dolphins", abbreviation: "MIA", score: null, spread: "+6", color: "#008e97" },
-          { name: "49ers", abbreviation: "SF", score: null, spread: "-6", color: "#aa0000" },
-        ],
-        quarters: emptyQuarters,
-        offensivePoints: null,
-        defensivePoints: null,
-      },
-    ],
-  },
-];
+import type { Team, WeekData } from "@/lib/nfl-types";
 
 function TeamBadge({ team }: { team: Team }) {
   return (
@@ -135,16 +15,17 @@ function displayValue(value: number | null) {
   return value === null ? "—" : value;
 }
 
-export function Dashboard() {
+export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   const [weekIndex, setWeekIndex] = useState(0);
-  const [picks, setPicks] = useState<Record<string, string>>({
-    "w1-sf-la": "SF",
-    "w1-dal-nyg": "DAL",
-  });
+  const [picks, setPicks] = useState<Record<string, string>>({});
 
   const week = weeks[weekIndex];
   const hasPreviousWeek = weekIndex > 0;
   const hasNextWeek = weekIndex < weeks.length - 1;
+
+  if (!week) {
+    return <main className="tracker-shell">No NFL data available.</main>;
+  }
 
   return (
     <main className="tracker-shell">
@@ -250,7 +131,7 @@ export function Dashboard() {
         <span>NFL Game Tracker</span>
         <span>Work in progress</span>
         <span>Go Niners ❤️</span>
-        <span className="footer-note">Hardcoded demo data for the first working slice.</span>
+        <span className="footer-note">Scores and quarter totals from ESPN. Scoring classification next.</span>
       </footer>
     </main>
   );
