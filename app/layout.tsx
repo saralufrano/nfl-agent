@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Red Zone | NFL Matchups",
-  description: "A personal NFL matchup dashboard",
+  title: "NFL Game Tracker",
+  description: "A personal NFL scoring, spread, and picks tracker",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
