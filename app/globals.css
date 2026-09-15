@@ -230,12 +230,24 @@ body {
 
 .total-box {
   display: grid;
-  min-height: 118px;
-  place-items: center;
+  grid-template-rows: 1fr 1fr;
   align-self: center;
+  min-height: 118px;
+  padding: 0 !important;
+  overflow: hidden;
   border-radius: 10px;
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 800;
+}
+
+.total-team-block {
+  display: grid;
+  min-height: 58px;
+  place-items: center;
+}
+
+.total-team-block + .total-team-block {
+  border-top: 2px solid rgba(16, 33, 59, 0.22);
 }
 
 .offense-total {
