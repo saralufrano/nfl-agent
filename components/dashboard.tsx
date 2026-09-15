@@ -145,6 +145,52 @@ function PreviousWeekGame({
   );
 }
 
+function InjuryReport({ game }: { game: Game }) {
+  return (
+    <section className="injury-panel">
+      <div className="injury-panel-title">Current injury report</div>
+      <div className="injury-grid">
+        {game.teams.map((team, teamIndex) => {
+          const injuries = game.injuries[teamIndex];
+          const visibleInjuries = injuries.slice(0, 8);
+
+          return (
+            <div className="injury-team-card" key={`${game.id}-${team.abbreviation}-injuries`}>
+              <div className="injury-team-heading">
+                <TeamBadge team={team} />
+                <strong>{team.name}</strong>
+                <span>{injuries.length} listed</span>
+              </div>
+
+              {visibleInjuries.length ? (
+                <div className="injury-list">
+                  {visibleInjuries.map((injury, injuryIndex) => (
+                    <div className="injury-line" key={`${injury.player}-${injuryIndex}`}>
+                      <div>
+                        <strong>{injury.player}</strong>
+                        <span className="injury-position">{injury.position}</span>
+                      </div>
+                      <div className="injury-meta">
+                        <span className="injury-status">{injury.status}</span>
+                        {injury.detail && <span>{injury.detail}</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {injuries.length > visibleInjuries.length && (
+                    <div className="injury-more">+{injuries.length - visibleInjuries.length} more on report</div>
+                  )}
+                </div>
+              ) : (
+                <div className="injury-empty">No injuries currently listed by ESPN.</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   const [weekIndex, setWeekIndex] = useState(0);
   const [picks, setPicks] = useState<Record<string, PickRecord>>({});
@@ -347,6 +393,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
 
                     {comparisonOpen && (
                       <div>
+                        <InjuryReport game={game} />
                         <div className="comparison-drawer-title">
                           How each team did against its Week {previousWeek.number} opponent
                         </div>
@@ -371,7 +418,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
         <span>NFL Game Tracker</span>
         <span>Work in progress</span>
         <span>Go Niners ❤️</span>
-        <span className="footer-note">Live NFL data + ESPN odds. Picks are saved in this browser.</span>
+        <span className="footer-note">Live NFL data + ESPN odds/injuries. Picks are saved in this browser.</span>
       </footer>
     </main>
   );
