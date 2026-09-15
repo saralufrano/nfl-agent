@@ -1,0 +1,151 @@
+.comparison-section {
+  min-width: 1500px;
+  padding: 0 24px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcff;
+}
+
+.comparison-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid #cfd8e6;
+  border-radius: 999px;
+  background: white;
+  padding: 8px 13px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.comparison-toggle:hover {
+  background: #f1f5fa;
+}
+
+.comparison-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.previous-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  padding: 16px;
+}
+
+.empty-previous-card {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+  color: var(--muted);
+}
+
+.previous-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.previous-team-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.previous-team-title > div {
+  display: grid;
+  gap: 2px;
+}
+
+.previous-team-title strong {
+  font-size: 18px;
+}
+
+.previous-team-title span,
+.previous-week-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.previous-week-label {
+  border-radius: 999px;
+  background: #eef2f7;
+  padding: 6px 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.previous-quarter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.previous-quarter {
+  min-height: 88px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fbfcfe;
+  padding: 9px;
+}
+
+.previous-quarter > strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.previous-quarter > div {
+  display: grid;
+  gap: 4px;
+}
+
+.previous-quarter span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.previous-totals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.previous-totals > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 9px;
+  padding: 9px 12px;
+}
+
+.previous-totals > div:first-child {
+  background: var(--pink);
+}
+
+.previous-totals > div:last-child {
+  background: var(--blue);
+}
+
+.previous-totals span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.previous-totals strong {
+  font-size: 20px;
+}
+
+@media (max-width: 900px) {
+  .comparison-panel {
+    grid-template-columns: 1fr;
+  }
+}
