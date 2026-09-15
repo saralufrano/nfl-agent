@@ -1,28 +1,19 @@
-# Red Zone — NFL Matchup Dashboard
+# NFL Game Tracker
 
-A responsive, dark-mode personal NFL matchup desk built with Next.js and TypeScript.
-This first screen uses explicitly labeled demo data, so it runs without API keys.
+Current working slice: a hardcoded Week 1 scoring tracker.
 
-## Run locally
+It shows:
+- final score
+- Vegas line
+- your pick
+- Q1–Q4 scoring breakdowns
+- offensive and defensive point totals
+
+Next: connect real NFL data, then automate the updates.
+
+Run locally with:
 
 ```bash
 npm install
 npm run dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000). Run `npm run build` to create the
-production build used by Vercel.
-
-## Data boundary
-
-`lib/data.ts` is the demo data provider. The UI consumes the normalized types in
-`lib/types.ts`, keeping a future live-data integration separate from presentation.
-
-## Current scope
-
-- Game slate with the 49ers pinned first
-- Interactive matchup selection
-- Season-average and last-five-games team comparisons
-- Injury reports and explicit unavailable-stat states
-
-Live data, scheduled analysis, saved picks, and news are intentionally deferred.
