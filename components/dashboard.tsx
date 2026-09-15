@@ -120,8 +120,20 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                 </div>
               ))}
 
-              <div className="total-box offense-total">{displayValue(game.offensivePoints)}</div>
-              <div className="total-box defense-total">{displayValue(game.defensivePoints)}</div>
+              <div className="total-box offense-total">
+                {game.offensivePoints.map((points, teamIndex) => (
+                  <div className="total-team-block" key={`${game.id}-offense-${teamIndex}`}>
+                    {displayValue(points)}
+                  </div>
+                ))}
+              </div>
+              <div className="total-box defense-total">
+                {game.defensivePoints.map((points, teamIndex) => (
+                  <div className="total-team-block" key={`${game.id}-defense-${teamIndex}`}>
+                    {displayValue(points)}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -131,7 +143,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
         <span>NFL Game Tracker</span>
         <span>Work in progress</span>
         <span>Go Niners ❤️</span>
-        <span className="footer-note">Scores and quarter totals from ESPN. Scoring classification next.</span>
+        <span className="footer-note">Live scores and scoring plays from ESPN.</span>
       </footer>
     </main>
   );
