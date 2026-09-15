@@ -2,6 +2,7 @@ import type { Game, Quarter, Team, WeekData } from "@/lib/nfl-types";
 
 const ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 const ESPN_SUMMARY = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary";
+const ESPN_CORE_EVENTS = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events";
 const SEASON = 2026;
 const PERIOD_COUNT = 5;
 
@@ -63,6 +64,21 @@ type EspnSummary = {
   scoringPlays?: EspnScoringPlay[];
 };
 
+type EspnOddsItem = {
+  $ref?: string;
+  provider?: {
+    id?: string;
+    name?: string;
+    priority?: number;
+  };
+  details?: string;
+  spread?: number;
+};
+
+type EspnOddsResponse = {
+  items?: EspnOddsItem[];
+};
+
 type ScoreBucket = "offense" | "defense";
 
 type PointTotals = {
@@ -83,7 +99,7 @@ function normalizeTeam(competitor: EspnCompetitor, completed: boolean): Team {
     name: competitor.team?.name || "Team",
     abbreviation: competitor.team?.abbreviation || "NFL",
     score: completed ? Number(competitor.score || 0) : null,
-    spread: "—",
+    spread: null,
     color: rawColor.startsWith("#") ? rawColor : `#${rawColor}`,
   };
 }
@@ -125,11 +141,94 @@ function normalizeGame(event: EspnEvent): NormalizedGame | null {
       quarters: fallbackQuarterBlocks(orderedTeams, completed),
       offensivePoints: [null, null],
       defensivePoints: [null, null],
+      completed,
+      oddsProvider: null,
     },
     completed,
     teamIds: [away.team?.id, home.team?.id],
     lineScores: [competitorLineScores(away), competitorLineScores(home)],
   };
+}
+
+function spreadsFromOdds(item: EspnOddsItem, game: Game): [number, number] | null {
+  const details = item.details?.trim();
+  const detailsMatch = details?.match(/^([A-Z]{2,4})\s+([+-]?\d+(?:\.\d+)?)$/i);
+
+  if (detailsMatch) {
+    const favorite = detailsMatch[1].toUpperCase();
+    const favoriteSpread = Number(detailsMatch[2]);
+    const teamIndex = game.teams.findIndex((team) => team.abbreviation.toUpperCase() === favorite);
+
+    if (teamIndex !== -1 && Number.isFinite(favoriteSpread)) {
+      const spreads: [number, number] = [0, 0];
+      spreads[teamIndex] = favoriteSpread;
+      spreads[teamIndex === 0 ? 1 : 0] = favoriteSpread === 0 ? 0 : -favoriteSpread;
+      return spreads;
+    }
+  }
+
+  if (typeof item.spread === "number" && Number.isFinite(item.spread)) {
+    // ESPN's core odds spread is from the home-team perspective. Teams here are [away, home].
+    return [item.spread === 0 ? 0 : -item.spread, item.spread];
+  }
+
+  return null;
+}
+
+async function resolveOddsItems(items: EspnOddsItem[]) {
+  if (items.some((item) => item.details || typeof item.spread === "number")) return items;
+
+  const refs = items.map((item) => item.$ref).filter((ref): ref is string => Boolean(ref)).slice(0, 5);
+  if (!refs.length) return items;
+
+  const resolved = await Promise.all(
+    refs.map(async (ref) => {
+      try {
+        const response = await fetch(ref.replace(/^http:/, "https:"), { next: { revalidate: 300 } });
+        if (!response.ok) return null;
+        return (await response.json()) as EspnOddsItem;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return resolved.filter((item): item is EspnOddsItem => Boolean(item));
+}
+
+async function enrichWithOdds(normalized: NormalizedGame): Promise<NormalizedGame> {
+  try {
+    const id = normalized.game.id;
+    const response = await fetch(`${ESPN_CORE_EVENTS}/${id}/competitions/${id}/odds`, {
+      next: { revalidate: 300 },
+    });
+
+    if (!response.ok) return normalized;
+
+    const payload = (await response.json()) as EspnOddsResponse;
+    const items = await resolveOddsItems(payload.items || []);
+    const usableItems = items.filter((item) => spreadsFromOdds(item, normalized.game));
+    if (!usableItems.length) return normalized;
+
+    const draftKings = usableItems.find((item) => item.provider?.name?.toLowerCase().includes("draftkings"));
+    const chosen = draftKings || [...usableItems].sort((a, b) => (a.provider?.priority ?? 999) - (b.provider?.priority ?? 999))[0];
+    const spreads = spreadsFromOdds(chosen, normalized.game);
+    if (!spreads) return normalized;
+
+    return {
+      ...normalized,
+      game: {
+        ...normalized.game,
+        teams: [
+          { ...normalized.game.teams[0], spread: spreads[0] },
+          { ...normalized.game.teams[1], spread: spreads[1] },
+        ],
+        oddsProvider: chosen.provider?.name || "ESPN odds",
+      },
+    };
+  } catch {
+    return normalized;
+  }
 }
 
 function scoringText(play: EspnScoringPlay) {
@@ -366,7 +465,8 @@ export async function fetchNflWeek(week: number): Promise<WeekData> {
   const normalizedGames = (data.events || [])
     .map(normalizeGame)
     .filter((game): game is NormalizedGame => Boolean(game));
-  const games = await Promise.all(normalizedGames.map(enrichWithScoringPlays));
+  const gamesWithOdds = await Promise.all(normalizedGames.map(enrichWithOdds));
+  const games = await Promise.all(gamesWithOdds.map(enrichWithScoringPlays));
   const completed =
     games.length > 0 &&
     (data.events || []).every((event) => event.competitions?.[0]?.status?.type?.completed);
