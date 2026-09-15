@@ -46,9 +46,8 @@ body {
 }
 
 .week-header {
-  position: relative;
   display: grid;
-  grid-template-columns: 54px 1fr 54px;
+  grid-template-columns: 54px minmax(0, 1fr) 54px minmax(160px, auto);
   align-items: center;
   gap: 18px;
   min-height: 88px;
@@ -83,13 +82,11 @@ body {
 }
 
 .week-status {
-  position: absolute;
-  right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
+  justify-self: end;
   border-radius: 999px;
   padding: 12px 18px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .completed-pill {
@@ -273,15 +270,13 @@ body {
     padding: 16px;
   }
 
-  .week-status {
-    position: static;
-    grid-column: 1 / -1;
-    justify-self: center;
-    transform: none;
-  }
-
   .week-header {
     grid-template-columns: 48px 1fr 48px;
+  }
+
+  .week-status {
+    grid-column: 1 / -1;
+    justify-self: center;
   }
 
   .week-header h1 {
