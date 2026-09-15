@@ -15,6 +15,10 @@ function displayValue(value: number | null) {
   return value === null ? "—" : value;
 }
 
+function periodLabel(periodIndex: number) {
+  return periodIndex === 4 ? "OT" : `Q${periodIndex + 1}`;
+}
+
 function findPreviousGame(week: WeekData | undefined, abbreviation: string): Game | undefined {
   return week?.games.find((game) => game.teams.some((team) => team.abbreviation === abbreviation));
 }
@@ -45,6 +49,7 @@ function PreviousWeekGame({
         <div>Q2</div>
         <div>Q3</div>
         <div>Q4</div>
+        <div>OT</div>
         <div>Offensive Points</div>
         <div>Defensive Points</div>
       </div>
@@ -68,10 +73,10 @@ function PreviousWeekGame({
           ))}
         </div>
 
-        {game.quarters.map((teamPlays, quarterIndex) => (
-          <div className="quarter-box" key={`${game.id}-${abbreviation}-q${quarterIndex + 1}`}>
+        {game.quarters.map((teamPlays, periodIndex) => (
+          <div className="quarter-box" key={`${game.id}-${abbreviation}-${periodLabel(periodIndex)}`}>
             {teamPlays.map((plays, teamIndex) => (
-              <div className="quarter-team-block" key={`${game.id}-${abbreviation}-q${quarterIndex + 1}-team${teamIndex}`}>
+              <div className="quarter-team-block" key={`${game.id}-${abbreviation}-${periodLabel(periodIndex)}-team${teamIndex}`}>
                 {plays.length ? (
                   plays.map((play, playIndex) => (
                     <div className="play-line" key={`${play}-${playIndex}`}>
@@ -158,6 +163,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
             <div>Q2</div>
             <div>Q3</div>
             <div>Q4</div>
+            <div>OT</div>
             <div>Total Offensive Points</div>
             <div>Total Defensive Points</div>
           </div>
@@ -204,10 +210,10 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                     ))}
                   </div>
 
-                  {game.quarters.map((teamPlays, quarterIndex) => (
-                    <div className="quarter-box" key={`${game.id}-q${quarterIndex + 1}`}>
+                  {game.quarters.map((teamPlays, periodIndex) => (
+                    <div className="quarter-box" key={`${game.id}-${periodLabel(periodIndex)}`}>
                       {teamPlays.map((plays, teamIndex) => (
-                        <div className="quarter-team-block" key={`${game.id}-q${quarterIndex + 1}-team${teamIndex}`}>
+                        <div className="quarter-team-block" key={`${game.id}-${periodLabel(periodIndex)}-team${teamIndex}`}>
                           {plays.map((play, playIndex) => (
                             <div className="play-line" key={`${play}-${playIndex}`}>
                               {play}
