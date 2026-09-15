@@ -133,13 +133,14 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-.game-row:last-child {
-  border-bottom: 0;
-}
-
 .game-row > div {
   min-width: 0;
   padding: 10px 12px;
+}
+
+.team-cell {
+  position: relative;
+  padding-bottom: 42px !important;
 }
 
 .team-stack,
@@ -195,6 +196,24 @@ body {
   height: 24px;
   accent-color: #2f80ed;
   cursor: pointer;
+}
+
+.compare-button {
+  position: absolute;
+  left: 12px;
+  bottom: 6px;
+  border: 1px solid #cfd7e3;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #31445f;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.compare-button:hover {
+  background: #eef3f8;
 }
 
 .quarter-box {
@@ -256,6 +275,103 @@ body {
 
 .defense-total {
   background: var(--blue);
+}
+
+.comparison-drawer {
+  min-width: 1500px;
+  padding: 18px 24px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #f4f7fb;
+}
+
+.comparison-drawer-title {
+  margin-bottom: 14px;
+  color: #31445f;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.comparison-game {
+  overflow: hidden;
+  margin-top: 12px;
+  border: 1px solid #d8e0eb;
+  border-radius: 12px;
+  background: white;
+}
+
+.comparison-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fbfcfe;
+}
+
+.comparison-caption .team-badge {
+  width: 42px;
+  height: 30px;
+  font-size: 10px;
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 220px 90px repeat(4, minmax(145px, 1fr)) 160px 160px;
+  min-width: 1200px;
+}
+
+.comparison-header {
+  align-items: end;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #516078;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.comparison-header > div {
+  padding: 0 10px 10px;
+  text-align: center;
+}
+
+.comparison-header > div:first-child {
+  text-align: left;
+}
+
+.comparison-row {
+  min-height: 154px;
+  padding: 12px 16px;
+}
+
+.comparison-row > div {
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.comparison-row .team-line {
+  font-size: 16px;
+}
+
+.comparison-row .team-badge {
+  width: 46px;
+  height: 32px;
+  font-size: 10px;
+}
+
+.comparison-team-focus {
+  border-radius: 8px;
+  background: #eef6ff;
+}
+
+.comparison-missing {
+  margin-top: 10px;
+  border: 1px dashed #cfd7e3;
+  border-radius: 10px;
+  padding: 16px;
+  color: var(--muted);
+  background: white;
 }
 
 .tracker-footer {
