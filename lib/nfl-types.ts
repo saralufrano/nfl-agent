@@ -7,13 +7,14 @@ export type Team = {
 };
 
 export type Quarter = [string[], string[]];
+export type TeamPointTotals = [number | null, number | null];
 
 export type Game = {
   id: string;
   teams: [Team, Team];
   quarters: [Quarter, Quarter, Quarter, Quarter];
-  offensivePoints: number | null;
-  defensivePoints: number | null;
+  offensivePoints: TeamPointTotals;
+  defensivePoints: TeamPointTotals;
 };
 
 export type WeekData = {
