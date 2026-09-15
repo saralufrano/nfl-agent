@@ -7,6 +7,7 @@
   --pink: #fff1f3;
   --blue: #eef6ff;
   --green: #e9f8ef;
+  --yellow: #fff4cf;
 }
 
 * {
@@ -73,23 +74,32 @@ body {
   color: var(--text);
   font-size: 38px;
   line-height: 1;
+  cursor: pointer;
 }
 
 .week-arrow:disabled {
-  opacity: 0.8;
+  opacity: 0.35;
   cursor: default;
 }
 
-.completed-pill {
+.week-status {
   position: absolute;
   right: 24px;
   top: 50%;
   transform: translateY(-50%);
   border-radius: 999px;
-  background: var(--green);
   padding: 12px 18px;
-  color: #164c32;
   font-weight: 700;
+}
+
+.completed-pill {
+  background: var(--green);
+  color: #164c32;
+}
+
+.upcoming-pill {
+  background: var(--yellow);
+  color: #8a5b00;
 }
 
 .tracker-scroll {
@@ -263,7 +273,7 @@ body {
     padding: 16px;
   }
 
-  .completed-pill {
+  .week-status {
     position: static;
     grid-column: 1 / -1;
     justify-self: center;
