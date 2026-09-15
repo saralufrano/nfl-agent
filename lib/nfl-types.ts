@@ -12,7 +12,7 @@ export type TeamPointTotals = [number | null, number | null];
 export type Game = {
   id: string;
   teams: [Team, Team];
-  quarters: [Quarter, Quarter, Quarter, Quarter];
+  quarters: Quarter[];
   offensivePoints: TeamPointTotals;
   defensivePoints: TeamPointTotals;
 };
