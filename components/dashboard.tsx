@@ -15,82 +15,68 @@ function displayValue(value: number | null) {
   return value === null ? "—" : value;
 }
 
-function findPreviousGame(previousWeek: WeekData | null, abbreviation: string) {
-  if (!previousWeek) return null;
-  return previousWeek.games.find((game) =>
-    game.teams.some((team) => team.abbreviation === abbreviation),
-  ) || null;
+function findPreviousGame(week: WeekData | undefined, abbreviation: string): Game | undefined {
+  return week?.games.find((game) => game.teams.some((team) => team.abbreviation === abbreviation));
 }
 
-function PreviousGame({ game, focusTeam }: { game: Game; focusTeam: Team }) {
+function PreviousWeekCard({
+  previousWeek,
+  abbreviation,
+}: {
+  previousWeek: WeekData;
+  abbreviation: string;
+}) {
+  const game = findPreviousGame(previousWeek, abbreviation);
+  if (!game) {
+    return <div className="previous-card empty-previous-card">No Week {previousWeek.number} game found.</div>;
+  }
+
+  const teamIndex = game.teams.findIndex((team) => team.abbreviation === abbreviation);
+  const opponentIndex = teamIndex === 0 ? 1 : 0;
+  const team = game.teams[teamIndex];
+  const opponent = game.teams[opponentIndex];
+
   return (
-    <div className="comparison-game">
-      <div className="comparison-caption">
-        <TeamBadge team={focusTeam} />
-        <strong>{focusTeam.name} last week</strong>
+    <article className="previous-card">
+      <div className="previous-card-header">
+        <div className="previous-team-title">
+          <TeamBadge team={team} />
+          <div>
+            <strong>{team.name}</strong>
+            <span>
+              vs {opponent.name} · {displayValue(team.score)}–{displayValue(opponent.score)}
+            </span>
+          </div>
+        </div>
+        <span className="previous-week-label">Week {previousWeek.number}</span>
       </div>
 
-      <div className="comparison-grid comparison-header">
-        <div>Teams</div>
-        <div>Score</div>
-        <div>Q1</div>
-        <div>Q2</div>
-        <div>Q3</div>
-        <div>Q4</div>
-        <div>Offensive Points</div>
-        <div>Defensive Points</div>
-      </div>
-
-      <div className="comparison-grid comparison-row">
-        <div className="team-stack">
-          {game.teams.map((team) => (
-            <div
-              className={`team-line ${team.abbreviation === focusTeam.abbreviation ? "comparison-team-focus" : ""}`}
-              key={team.abbreviation}
-            >
-              <TeamBadge team={team} />
-              <strong>{team.name}</strong>
+      <div className="previous-quarter-grid">
+        {game.quarters.map((quarter, quarterIndex) => (
+          <div className="previous-quarter" key={`${game.id}-${abbreviation}-q${quarterIndex + 1}`}>
+            <strong>Q{quarterIndex + 1}</strong>
+            <div>
+              {quarter[teamIndex].length
+                ? quarter[teamIndex].map((play, playIndex) => (
+                    <span key={`${play}-${playIndex}`}>{play}</span>
+                  ))
+                : <span>—</span>}
             </div>
-          ))}
-        </div>
-
-        <div className="value-stack score-stack">
-          {game.teams.map((team) => (
-            <strong key={team.abbreviation}>{displayValue(team.score)}</strong>
-          ))}
-        </div>
-
-        {game.quarters.map((teamPlays, quarterIndex) => (
-          <div className="quarter-box" key={`${game.id}-compare-q${quarterIndex + 1}`}>
-            {teamPlays.map((plays, teamIndex) => (
-              <div className="quarter-team-block" key={`${game.id}-compare-q${quarterIndex + 1}-team${teamIndex}`}>
-                {plays.map((play, playIndex) => (
-                  <div className="play-line" key={`${play}-${playIndex}`}>
-                    {play}
-                  </div>
-                ))}
-              </div>
-            ))}
           </div>
         ))}
+      </div>
 
-        <div className="total-box offense-total">
-          {game.offensivePoints.map((points, teamIndex) => (
-            <div className="total-team-block" key={`${game.id}-compare-offense-${teamIndex}`}>
-              {displayValue(points)}
-            </div>
-          ))}
+      <div className="previous-totals">
+        <div>
+          <span>Offense</span>
+          <strong>{displayValue(game.offensivePoints[teamIndex])}</strong>
         </div>
-
-        <div className="total-box defense-total">
-          {game.defensivePoints.map((points, teamIndex) => (
-            <div className="total-team-block" key={`${game.id}-compare-defense-${teamIndex}`}>
-              {displayValue(points)}
-            </div>
-          ))}
+        <div>
+          <span>Defense</span>
+          <strong>{displayValue(game.defensivePoints[teamIndex])}</strong>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -100,9 +86,9 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   const [expandedComparisons, setExpandedComparisons] = useState<Record<string, boolean>>({});
 
   const week = weeks[weekIndex];
+  const previousWeek = weekIndex > 0 ? weeks[weekIndex - 1] : undefined;
   const hasPreviousWeek = weekIndex > 0;
   const hasNextWeek = weekIndex < weeks.length - 1;
-  const previousWeek = hasPreviousWeek ? weeks[weekIndex - 1] : null;
 
   if (!week) {
     return <main className="tracker-shell">No NFL data available.</main>;
@@ -151,37 +137,19 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
           </div>
 
           {week.games.map((game) => {
-            const previousGames = game.teams.map((team) => findPreviousGame(previousWeek, team.abbreviation));
-            const canCompare = week.status === "Upcoming" && previousWeek && previousGames.some(Boolean);
-            const isExpanded = Boolean(expandedComparisons[game.id]);
+            const canCompare = week.status === "Upcoming" && Boolean(previousWeek);
+            const comparisonOpen = Boolean(expandedComparisons[game.id]);
 
             return (
               <Fragment key={game.id}>
                 <div className="tracker-grid game-row">
-                  <div className="team-cell">
-                    <div className="team-stack">
-                      {game.teams.map((team) => (
-                        <div className="team-line" key={team.abbreviation}>
-                          <TeamBadge team={team} />
-                          <strong>{team.name}</strong>
-                        </div>
-                      ))}
-                    </div>
-
-                    {canCompare && (
-                      <button
-                        className="compare-button"
-                        type="button"
-                        onClick={() =>
-                          setExpandedComparisons((current) => ({
-                            ...current,
-                            [game.id]: !current[game.id],
-                          }))
-                        }
-                      >
-                        {isExpanded ? "Hide Week 1" : "Compare Week 1"} {isExpanded ? "▴" : "▾"}
-                      </button>
-                    )}
+                  <div className="team-stack">
+                    {game.teams.map((team) => (
+                      <div className="team-line" key={team.abbreviation}>
+                        <TeamBadge team={team} />
+                        <strong>{team.name}</strong>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="value-stack score-stack">
@@ -240,21 +208,34 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                   </div>
                 </div>
 
-                {canCompare && isExpanded && (
-                  <div className="comparison-drawer">
-                    <div className="comparison-drawer-title">Week {previousWeek.number}: what they did last week</div>
-                    {game.teams.map((team, teamIndex) => {
-                      const previousGame = previousGames[teamIndex];
-                      if (!previousGame) {
-                        return (
-                          <div className="comparison-missing" key={`${game.id}-${team.abbreviation}-missing`}>
-                            No Week {previousWeek.number} game found for {team.name}.
-                          </div>
-                        );
+                {canCompare && previousWeek && (
+                  <div className="comparison-section">
+                    <button
+                      className="comparison-toggle"
+                      type="button"
+                      aria-expanded={comparisonOpen}
+                      onClick={() =>
+                        setExpandedComparisons((current) => ({
+                          ...current,
+                          [game.id]: !current[game.id],
+                        }))
                       }
+                    >
+                      {comparisonOpen ? "Hide" : "Compare"} Week {previousWeek.number}
+                      <span aria-hidden="true">{comparisonOpen ? "▴" : "▾"}</span>
+                    </button>
 
-                      return <PreviousGame game={previousGame} focusTeam={team} key={`${game.id}-${team.abbreviation}-previous`} />;
-                    })}
+                    {comparisonOpen && (
+                      <div className="comparison-panel">
+                        {game.teams.map((team) => (
+                          <PreviousWeekCard
+                            key={`${game.id}-${team.abbreviation}-previous`}
+                            previousWeek={previousWeek}
+                            abbreviation={team.abbreviation}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </Fragment>
