@@ -54,27 +54,19 @@ type EspnScoringPlay = {
   text?: string;
   shortText?: string;
   scoreValue?: number;
+  awayScore?: number | string;
+  homeScore?: number | string;
 };
 
 type EspnSummary = {
   scoringPlays?: EspnScoringPlay[];
 };
 
-type ScoreBucket = "offense" | "defense" | "special";
+type ScoreBucket = "offense" | "defense";
 
 type PointTotals = {
   offense: number;
   defense: number;
-};
-
-type TouchdownRef = {
-  playIndex: number;
-  bucket: ScoreBucket;
-  points: number;
-};
-
-type LastTouchdown = TouchdownRef & {
-  quarterIndex: number;
 };
 
 type NormalizedGame = {
@@ -146,111 +138,132 @@ function scoringText(play: EspnScoringPlay) {
     .toLowerCase();
 }
 
-function scoringPoints(play: EspnScoringPlay) {
-  if (typeof play.scoreValue === "number") return play.scoreValue;
+function asNumber(value: number | string | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
 
+function fallbackPoints(play: EspnScoringPlay) {
   const text = scoringText(play);
   if (text.includes("field goal")) return 3;
   if (text.includes("safety")) return 2;
   if (text.includes("two-point") || text.includes("two point") || text.includes("2pt")) return 2;
   if (text.includes("extra point") || text.includes("pat")) return 1;
   if (text.includes("touchdown") || text.includes(" td ") || text.endsWith(" td")) return 6;
+  if (typeof play.scoreValue === "number") return play.scoreValue;
   return 0;
 }
 
-function isExtraPoint(play: EspnScoringPlay) {
-  const text = scoringText(play);
-  return text.includes("extra point") || text.includes("pat");
+function scoreSnapshot(play: EspnScoringPlay): [number, number] | null {
+  const away = asNumber(play.awayScore);
+  const home = asNumber(play.homeScore);
+  if (away === null || home === null) return null;
+  return [away, home];
 }
 
-function isTwoPoint(play: EspnScoringPlay) {
-  const text = scoringText(play);
-  return text.includes("two-point") || text.includes("two point") || text.includes("2pt");
+function inferTeamIndex(
+  play: EspnScoringPlay,
+  teamIds: [string | undefined, string | undefined],
+  previousScore: [number, number],
+) {
+  const byId = teamIds.findIndex((id) => id && id === play.team?.id);
+  if (byId !== -1) return byId;
+
+  const snapshot = scoreSnapshot(play);
+  if (!snapshot) return -1;
+
+  const awayDelta = snapshot[0] - previousScore[0];
+  const homeDelta = snapshot[1] - previousScore[1];
+  if (awayDelta > 0 && homeDelta <= 0) return 0;
+  if (homeDelta > 0 && awayDelta <= 0) return 1;
+  return -1;
 }
 
-function classifyScoringPlay(play: EspnScoringPlay): { label: string; bucket: ScoreBucket; isTouchdown: boolean } {
+function pointsFromScoreProgress(
+  play: EspnScoringPlay,
+  teamIndex: number,
+  previousScore: [number, number],
+) {
+  const snapshot = scoreSnapshot(play);
+  if (!snapshot) return fallbackPoints(play);
+
+  const delta = snapshot[teamIndex] - previousScore[teamIndex];
+  return delta > 0 ? delta : fallbackPoints(play);
+}
+
+function classifyScoringPlay(
+  play: EspnScoringPlay,
+  points: number,
+): { label: string; bucket: ScoreBucket } {
   const text = scoringText(play);
-  const points = scoringPoints(play);
-  const prefix = points > 0 ? `${points} ` : "";
+  const prefix = `${points} `;
+
+  // Conversion attempts are not touchdowns. A blocked/missed PAT is zero points and
+  // never reaches this function. A returned conversion is worth two points.
+  if (points <= 2 && (text.includes("extra point") || text.includes("pat"))) {
+    if (points === 2 && (text.includes("return") || text.includes("blocked"))) {
+      return { label: `${prefix}Def. PAT Return`, bucket: "defense" };
+    }
+    return { label: `${prefix}Kick XP`, bucket: "offense" };
+  }
+
+  if (points === 2 && (text.includes("two-point") || text.includes("two point") || text.includes("2pt"))) {
+    if (text.includes("return") || text.includes("blocked") || text.includes("interception")) {
+      return { label: `${prefix}Def. 2PT Return`, bucket: "defense" };
+    }
+    const suffix = text.includes("pass") ? "Pass" : text.includes("rush") || text.includes("run") ? "Run" : "Conv";
+    return { label: `${prefix}Off. 2PT ${suffix}`, bucket: "offense" };
+  }
 
   if ((text.includes("interception") || text.includes("pick six") || text.includes("pick-six")) && text.includes("touchdown")) {
-    return { label: `${prefix}Def. TD (INT)`, bucket: "defense", isTouchdown: true };
+    return { label: `${prefix}Def. TD (INT)`, bucket: "defense" };
   }
 
   if (text.includes("fumble") && text.includes("touchdown")) {
-    return { label: `${prefix}Def. TD (Fum)`, bucket: "defense", isTouchdown: true };
+    return { label: `${prefix}Def. TD (Fum)`, bucket: "defense" };
   }
 
-  if (text.includes("blocked") && text.includes("touchdown")) {
-    return { label: `${prefix}Def. TD (Block)`, bucket: "defense", isTouchdown: true };
+  if (text.includes("blocked") && text.includes("touchdown") && points >= 6) {
+    return { label: `${prefix}Def. TD (Block)`, bucket: "defense" };
   }
 
   if (text.includes("safety")) {
-    return { label: `${prefix}Def. Safety`, bucket: "defense", isTouchdown: false };
+    return { label: `${prefix}Def. Safety`, bucket: "defense" };
   }
 
   if ((text.includes("kickoff return") || text.includes("punt return")) && text.includes("touchdown")) {
-    return { label: `${prefix}ST TD Return`, bucket: "special", isTouchdown: true };
+    return { label: `${prefix}ST TD Return`, bucket: "offense" };
   }
 
   if (text.includes("field goal")) {
-    return { label: `${prefix}Kick FG`, bucket: "offense", isTouchdown: false };
+    return { label: `${prefix}Kick FG`, bucket: "offense" };
   }
 
   if ((text.includes("rushing touchdown") || text.includes("rush") || text.includes(" yd run")) && text.includes("touchdown")) {
-    return { label: `${prefix}Off. TD Run`, bucket: "offense", isTouchdown: true };
+    return { label: `${prefix}Off. TD Run`, bucket: "offense" };
   }
 
   if (
     (text.includes("passing touchdown") || text.includes("pass") || text.includes(" yd pass")) &&
     text.includes("touchdown")
   ) {
-    return { label: `${prefix}Off. TD Pass`, bucket: "offense", isTouchdown: true };
+    return { label: `${prefix}Off. TD Pass`, bucket: "offense" };
   }
 
-  if (text.includes("touchdown")) {
-    return { label: `${prefix}Off. TD`, bucket: "offense", isTouchdown: true };
+  if (text.includes("touchdown") || points >= 6) {
+    return { label: `${prefix}Off. TD`, bucket: "offense" };
   }
 
-  if (isExtraPoint(play)) {
-    return { label: `${prefix}Kick XP`, bucket: "offense", isTouchdown: false };
-  }
-
-  if (isTwoPoint(play)) {
-    const suffix = text.includes("pass") ? "Pass" : text.includes("rush") || text.includes("run") ? "Run" : "Conv";
-    return { label: `${prefix}Off. 2PT ${suffix}`, bucket: "offense", isTouchdown: false };
-  }
-
-  return { label: `${prefix}${play.type?.text || "Score"}`.trim(), bucket: "offense", isTouchdown: false };
+  return { label: `${prefix}${play.type?.text || "Score"}`.trim(), bucket: "offense" };
 }
 
 function addPoints(totals: PointTotals, bucket: ScoreBucket, points: number) {
   if (bucket === "defense") totals.defense += points;
-  if (bucket === "offense") totals.offense += points;
-}
-
-function bumpMergedTouchdownLabel(label: string, points: number, twoPoint: boolean) {
-  const rest = label.replace(/^\d+\s+/, "").replace(/ \+ 2PT$/, "");
-  return `${points} ${rest}${twoPoint ? " + 2PT" : ""}`;
-}
-
-function addMissingConversion(
-  quarters: [Quarter, Quarter, Quarter, Quarter],
-  teamTotals: [PointTotals, PointTotals],
-  quarterIndex: number,
-  teamIndex: number,
-  touchdown: TouchdownRef,
-  points: number,
-  twoPoint: boolean,
-) {
-  const currentLabel = quarters[quarterIndex][teamIndex][touchdown.playIndex];
-  touchdown.points += points;
-  quarters[quarterIndex][teamIndex][touchdown.playIndex] = bumpMergedTouchdownLabel(
-    currentLabel,
-    touchdown.points,
-    twoPoint,
-  );
-  addPoints(teamTotals[teamIndex], touchdown.bucket, points);
+  else totals.offense += points;
 }
 
 async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game> {
@@ -284,84 +297,60 @@ async function enrichWithScoringPlays(normalized: NormalizedGame): Promise<Game>
       [0, 0],
       [0, 0],
     ];
-    const touchdownRefs: TouchdownRef[][][] = [
-      [[], []],
-      [[], []],
-      [[], []],
-      [[], []],
-    ];
-    const lastTouchdownByTeam = new Map<number, LastTouchdown>();
+
+    let previousScore: [number, number] = [0, 0];
 
     for (const play of scoringPlays) {
       const quarterNumber = play.period?.number;
-      if (!quarterNumber || quarterNumber < 1 || quarterNumber > 4) continue;
+      const snapshot = scoreSnapshot(play);
 
-      const teamIndex = normalized.teamIds.findIndex((id) => id && id === play.team?.id);
-      if (teamIndex === -1) continue;
-
-      const quarterIndex = quarterNumber - 1;
-      const points = scoringPoints(play);
-      const previousTouchdown = lastTouchdownByTeam.get(teamIndex);
-
-      if ((isExtraPoint(play) || isTwoPoint(play)) && previousTouchdown?.quarterIndex === quarterIndex) {
-        const mergedPoints = previousTouchdown.points + points;
-        const existingLabel = quarters[quarterIndex][teamIndex][previousTouchdown.playIndex];
-        quarters[quarterIndex][teamIndex][previousTouchdown.playIndex] = bumpMergedTouchdownLabel(
-          existingLabel,
-          mergedPoints,
-          isTwoPoint(play),
-        );
-        previousTouchdown.points = mergedPoints;
-        quarterScoredPoints[quarterIndex][teamIndex] += points;
-        addPoints(teamTotals[teamIndex], previousTouchdown.bucket, points);
+      if (!quarterNumber || quarterNumber < 1 || quarterNumber > 4) {
+        if (snapshot) previousScore = snapshot;
         continue;
       }
 
-      const classified = classifyScoringPlay(play);
-      const playIndex = quarters[quarterIndex][teamIndex].push(classified.label) - 1;
+      const teamIndex = inferTeamIndex(play, normalized.teamIds, previousScore);
+      if (teamIndex === -1) {
+        if (snapshot) previousScore = snapshot;
+        continue;
+      }
+
+      const points = pointsFromScoreProgress(play, teamIndex, previousScore);
+      if (snapshot) previousScore = snapshot;
+
+      // Missed/blocked conversions that did not change the score are intentionally omitted.
+      if (points <= 0) continue;
+
+      const quarterIndex = quarterNumber - 1;
+      const classified = classifyScoringPlay(play, points);
+      quarters[quarterIndex][teamIndex].push(classified.label);
       quarterScoredPoints[quarterIndex][teamIndex] += points;
       addPoints(teamTotals[teamIndex], classified.bucket, points);
-
-      if (classified.isTouchdown) {
-        const touchdown: TouchdownRef = {
-          playIndex,
-          bucket: classified.bucket,
-          points,
-        };
-        touchdownRefs[quarterIndex][teamIndex].push(touchdown);
-        lastTouchdownByTeam.set(teamIndex, {
-          ...touchdown,
-          quarterIndex,
-        });
-      } else {
-        lastTouchdownByTeam.delete(teamIndex);
-      }
     }
 
-    // ESPN's scoring-play feed sometimes omits PATs even though the scoreboard quarter
-    // totals include them. Reconcile the classified plays against the authoritative
-    // quarter total so a 6-point TD becomes the 7-point score the user actually saw.
+    // QA/reconciliation guard: the scoreboard quarter totals are authoritative. If ESPN's
+    // scoring-play feed omitted a scoring event, make the missing points visible instead of
+    // silently showing totals that do not add up to the real score.
     for (let quarterIndex = 0; quarterIndex < 4; quarterIndex += 1) {
       for (let teamIndex = 0; teamIndex < 2; teamIndex += 1) {
         const target = normalized.lineScores[teamIndex][quarterIndex] ?? 0;
-        let missingPoints = target - quarterScoredPoints[quarterIndex][teamIndex];
-        if (missingPoints <= 0) continue;
+        const accounted = quarterScoredPoints[quarterIndex][teamIndex];
+        const missing = target - accounted;
 
-        const sixPointTouchdowns = touchdownRefs[quarterIndex][teamIndex].filter((touchdown) => touchdown.points === 6);
-
-        if (missingPoints === 2 && sixPointTouchdowns.length === 1) {
-          addMissingConversion(quarters, teamTotals, quarterIndex, teamIndex, sixPointTouchdowns[0], 2, true);
-          quarterScoredPoints[quarterIndex][teamIndex] += 2;
-          continue;
-        }
-
-        for (const touchdown of sixPointTouchdowns) {
-          if (missingPoints <= 0) break;
-          addMissingConversion(quarters, teamTotals, quarterIndex, teamIndex, touchdown, 1, false);
-          quarterScoredPoints[quarterIndex][teamIndex] += 1;
-          missingPoints -= 1;
+        if (missing > 0) {
+          quarters[quarterIndex][teamIndex].push(`${missing} Off. Other`);
+          quarterScoredPoints[quarterIndex][teamIndex] += missing;
+          teamTotals[teamIndex].offense += missing;
         }
       }
+    }
+
+    // Final game-level guard. This should normally be zero after quarter reconciliation.
+    for (let teamIndex = 0; teamIndex < 2; teamIndex += 1) {
+      const finalScore = normalized.game.teams[teamIndex].score ?? 0;
+      const accounted = teamTotals[teamIndex].offense + teamTotals[teamIndex].defense;
+      const missing = finalScore - accounted;
+      if (missing > 0) teamTotals[teamIndex].offense += missing;
     }
 
     return {
