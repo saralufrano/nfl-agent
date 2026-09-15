@@ -191,23 +191,34 @@ body {
 }
 
 .quarter-box {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
   align-self: center;
   min-height: 118px;
+  padding: 0 !important;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fbfcfe;
 }
 
+.quarter-team-block {
+  display: flex;
+  min-height: 58px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 7px 12px;
+}
+
+.quarter-team-block + .quarter-team-block {
+  border-top: 2px solid #cfd7e3;
+}
+
 .play-line {
-  padding: 8px 0;
-  border-bottom: 1px solid #edf0f4;
+  padding: 3px 0;
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
-}
-
-.play-line:last-child {
-  border-bottom: 0;
 }
 
 .total-box {
