@@ -10,10 +10,12 @@ type Team = {
   color: string;
 };
 
+type Quarter = [string[], string[]];
+
 type Game = {
   id: string;
   teams: [Team, Team];
-  quarters: [string[], string[], string[], string[]];
+  quarters: [Quarter, Quarter, Quarter, Quarter];
   offensivePoints: number;
   defensivePoints: number;
 };
@@ -26,12 +28,12 @@ const games: Game[] = [
       { name: "Rams", abbreviation: "LA", score: 7, spread: "+3", color: "#003594" },
     ],
     quarters: [
-      ["10  Off. FG", "7   Off. TD Pass", "7   Off. TD Run"],
-      ["7   Off. TD Pass"],
-      ["3   Off. FG"],
-      ["7   Off. TD Run", "7   Def. TD (INT)"],
+      [["7 Off. TD Pass"], []],
+      [["7 Off. TD Run"], ["7 Off. TD Pass"]],
+      [["7 Def. TD (INT)"], []],
+      [["7 Off. TD Pass"], []],
     ],
-    offensivePoints: 24,
+    offensivePoints: 28,
     defensivePoints: 7,
   },
   {
@@ -41,12 +43,12 @@ const games: Game[] = [
       { name: "Giants", abbreviation: "NYG", score: 7, spread: "+3", color: "#0b2265" },
     ],
     quarters: [
-      ["14  Off. TD Pass", "3   Off. FG"],
-      ["7   Off. TD Run"],
-      ["0"],
-      ["7   Def. TD (Fum)"],
+      [["7 Off. TD Pass"], []],
+      [["7 Off. TD Run"], ["7 Off. TD Pass"]],
+      [["7 Off. TD Pass"], []],
+      [["7 Def. TD (Fum)"], []],
     ],
-    offensivePoints: 21,
+    offensivePoints: 28,
     defensivePoints: 7,
   },
   {
@@ -56,13 +58,13 @@ const games: Game[] = [
       { name: "Ravens", abbreviation: "BAL", score: 20, spread: "+3", color: "#241773" },
     ],
     quarters: [
-      ["7   Off. TD Pass", "3   Off. FG"],
-      ["7   Off. TD Run", "3   Def. FG"],
-      ["7   Off. TD Pass"],
-      ["0"],
+      [["7 Off. TD Pass"], ["7 Off. TD Run"]],
+      [["7 Off. TD Run"], ["3 Kick FG"]],
+      [["7 Off. TD Pass"], ["7 Off. TD Pass"]],
+      [["6 Kick FG ×2"], ["3 Kick FG"]],
     ],
-    offensivePoints: 21,
-    defensivePoints: 3,
+    offensivePoints: 35,
+    defensivePoints: 0,
   },
 ];
 
@@ -145,11 +147,15 @@ export function Dashboard() {
                 ))}
               </div>
 
-              {game.quarters.map((plays, index) => (
-                <div className="quarter-box" key={`${game.id}-q${index + 1}`}>
-                  {plays.map((play, playIndex) => (
-                    <div className="play-line" key={`${play}-${playIndex}`}>
-                      {play}
+              {game.quarters.map((teamPlays, quarterIndex) => (
+                <div className="quarter-box" key={`${game.id}-q${quarterIndex + 1}`}>
+                  {teamPlays.map((plays, teamIndex) => (
+                    <div className="quarter-team-block" key={`${game.id}-q${quarterIndex + 1}-team${teamIndex}`}>
+                      {plays.map((play, playIndex) => (
+                        <div className="play-line" key={`${play}-${playIndex}`}>
+                          {play}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
