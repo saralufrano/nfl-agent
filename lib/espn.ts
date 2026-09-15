@@ -1,7 +1,8 @@
-import type { Game, Quarter, Team, WeekData } from "@/lib/nfl-types";
+import type { Game, Injury, Quarter, Team, WeekData } from "@/lib/nfl-types";
 
 const ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 const ESPN_SUMMARY = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary";
+const ESPN_INJURIES = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries";
 const ESPN_CORE_EVENTS = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events";
 const SEASON = 2026;
 const PERIOD_COUNT = 5;
@@ -79,6 +80,31 @@ type EspnOddsResponse = {
   items?: EspnOddsItem[];
 };
 
+type EspnInjury = {
+  athlete?: {
+    fullName?: string;
+    displayName?: string;
+    position?: {
+      abbreviation?: string;
+    };
+  };
+  status?: string;
+  type?: {
+    description?: string;
+  };
+};
+
+type EspnTeamInjuries = {
+  team?: {
+    abbreviation?: string;
+  };
+  injuries?: EspnInjury[];
+};
+
+type EspnInjuriesResponse = {
+  injuries?: EspnTeamInjuries[];
+};
+
 type ScoreBucket = "offense" | "defense";
 
 type PointTotals = {
@@ -141,6 +167,7 @@ function normalizeGame(event: EspnEvent): NormalizedGame | null {
       quarters: fallbackQuarterBlocks(orderedTeams, completed),
       offensivePoints: [null, null],
       defensivePoints: [null, null],
+      injuries: [[], []],
       completed,
       oddsProvider: null,
     },
@@ -168,7 +195,6 @@ function spreadsFromOdds(item: EspnOddsItem, game: Game): [number, number] | nul
   }
 
   if (typeof item.spread === "number" && Number.isFinite(item.spread)) {
-    // ESPN's core odds spread is from the home-team perspective. Teams here are [away, home].
     return [item.spread === 0 ? 0 : -item.spread, item.spread];
   }
 
@@ -229,6 +255,62 @@ async function enrichWithOdds(normalized: NormalizedGame): Promise<NormalizedGam
   } catch {
     return normalized;
   }
+}
+
+function injuryPriority(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("out") || normalized.includes("injured reserve")) return 0;
+  if (normalized.includes("doubtful")) return 1;
+  if (normalized.includes("questionable")) return 2;
+  if (normalized.includes("probable")) return 3;
+  return 4;
+}
+
+function normalizeInjury(injury: EspnInjury): Injury {
+  return {
+    player: injury.athlete?.fullName || injury.athlete?.displayName || "Unknown player",
+    position: injury.athlete?.position?.abbreviation || "—",
+    status: injury.status || "Injury report",
+    detail: injury.type?.description || null,
+  };
+}
+
+async function fetchInjuryMap(): Promise<Map<string, Injury[]>> {
+  try {
+    const response = await fetch(ESPN_INJURIES, { next: { revalidate: 300 } });
+    if (!response.ok) return new Map();
+
+    const payload = (await response.json()) as EspnInjuriesResponse;
+    const map = new Map<string, Injury[]>();
+
+    for (const teamReport of payload.injuries || []) {
+      const abbreviation = teamReport.team?.abbreviation?.toUpperCase();
+      if (!abbreviation) continue;
+
+      const injuries = (teamReport.injuries || [])
+        .map(normalizeInjury)
+        .sort((a, b) => injuryPriority(a.status) - injuryPriority(b.status) || a.player.localeCompare(b.player));
+
+      map.set(abbreviation, injuries);
+    }
+
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function enrichWithInjuries(normalized: NormalizedGame, injuryMap: Map<string, Injury[]>): NormalizedGame {
+  const awayAbbreviation = normalized.game.teams[0].abbreviation.toUpperCase();
+  const homeAbbreviation = normalized.game.teams[1].abbreviation.toUpperCase();
+
+  return {
+    ...normalized,
+    game: {
+      ...normalized.game,
+      injuries: [injuryMap.get(awayAbbreviation) || [], injuryMap.get(homeAbbreviation) || []],
+    },
+  };
 }
 
 function scoringText(play: EspnScoringPlay) {
@@ -465,8 +547,13 @@ export async function fetchNflWeek(week: number): Promise<WeekData> {
   const normalizedGames = (data.events || [])
     .map(normalizeGame)
     .filter((game): game is NormalizedGame => Boolean(game));
-  const gamesWithOdds = await Promise.all(normalizedGames.map(enrichWithOdds));
-  const games = await Promise.all(gamesWithOdds.map(enrichWithScoringPlays));
+
+  const [gamesWithOdds, injuryMap] = await Promise.all([
+    Promise.all(normalizedGames.map(enrichWithOdds)),
+    fetchInjuryMap(),
+  ]);
+  const gamesWithInjuries = gamesWithOdds.map((game) => enrichWithInjuries(game, injuryMap));
+  const games = await Promise.all(gamesWithInjuries.map(enrichWithScoringPlays));
   const completed =
     games.length > 0 &&
     (data.events || []).every((event) => event.competitions?.[0]?.status?.type?.completed);
