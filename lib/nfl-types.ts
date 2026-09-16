@@ -13,9 +13,16 @@ export type Injury = {
   detail: string | null;
 };
 
+export type AvailabilityNote = {
+  headline: string;
+  detail: string | null;
+  published: string | null;
+};
+
 export type Quarter = [string[], string[]];
 export type TeamPointTotals = [number | null, number | null];
 export type TeamInjuries = [Injury[], Injury[]];
+export type TeamAvailability = [AvailabilityNote[], AvailabilityNote[]];
 
 export type Game = {
   id: string;
@@ -24,6 +31,7 @@ export type Game = {
   offensivePoints: TeamPointTotals;
   defensivePoints: TeamPointTotals;
   injuries: TeamInjuries;
+  availabilityNotes?: TeamAvailability;
   completed: boolean;
   oddsProvider: string | null;
 };
