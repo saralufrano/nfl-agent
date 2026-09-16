@@ -145,43 +145,43 @@ function PreviousWeekGame({
   );
 }
 
-function InjuryReport({ game }: { game: Game }) {
+function AvailabilityWatch({ game }: { game: Game }) {
   return (
     <section className="injury-panel">
-      <div className="injury-panel-title">Current injury report</div>
+      <div className="injury-panel-title">Availability Watch</div>
       <div className="injury-grid">
         {game.teams.map((team, teamIndex) => {
-          const injuries = game.injuries[teamIndex];
-          const visibleInjuries = injuries.slice(0, 8);
+          const availability = game.injuries[teamIndex];
+          const visibleAvailability = availability.slice(0, 8);
 
           return (
-            <div className="injury-team-card" key={`${game.id}-${team.abbreviation}-injuries`}>
+            <div className="injury-team-card" key={`${game.id}-${team.abbreviation}-availability`}>
               <div className="injury-team-heading">
                 <TeamBadge team={team} />
                 <strong>{team.name}</strong>
-                <span>{injuries.length} listed</span>
+                <span>{availability.length} flagged</span>
               </div>
 
-              {visibleInjuries.length ? (
+              {visibleAvailability.length ? (
                 <div className="injury-list">
-                  {visibleInjuries.map((injury, injuryIndex) => (
-                    <div className="injury-line" key={`${injury.player}-${injuryIndex}`}>
+                  {visibleAvailability.map((item, itemIndex) => (
+                    <div className="injury-line" key={`${item.player}-${itemIndex}`}>
                       <div>
-                        <strong>{injury.player}</strong>
-                        <span className="injury-position">{injury.position}</span>
+                        <strong>{item.player}</strong>
+                        <span className="injury-position">{item.position}</span>
                       </div>
                       <div className="injury-meta">
-                        <span className="injury-status">{injury.status}</span>
-                        {injury.detail && <span>{injury.detail}</span>}
+                        <span className="injury-status">{item.status}</span>
+                        {item.detail && <span>{item.detail}</span>}
                       </div>
                     </div>
                   ))}
-                  {injuries.length > visibleInjuries.length && (
-                    <div className="injury-more">+{injuries.length - visibleInjuries.length} more on report</div>
+                  {availability.length > visibleAvailability.length && (
+                    <div className="injury-more">+{availability.length - visibleAvailability.length} more flagged</div>
                   )}
                 </div>
               ) : (
-                <div className="injury-empty">No injuries currently listed by ESPN.</div>
+                <div className="injury-empty">No current availability concerns listed by Sleeper.</div>
               )}
             </div>
           );
@@ -394,7 +394,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
 
                     {comparisonOpen && (
                       <div>
-                        <InjuryReport game={game} />
+                        <AvailabilityWatch game={game} />
                         <div className="comparison-drawer-title">
                           How each team did against its Week {previousWeek.number} opponent
                         </div>
@@ -419,7 +419,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
         <span>NFL Game Tracker</span>
         <span>Work in progress</span>
         <span>Go Niners ❤️</span>
-        <span className="footer-note">Live NFL data + ESPN odds/injuries. Picks are saved in this browser.</span>
+        <span className="footer-note">Live NFL data + ESPN odds + Sleeper availability. Picks are saved in this browser.</span>
       </footer>
     </main>
   );
