@@ -152,32 +152,46 @@ function AvailabilityWatch({ game }: { game: Game }) {
       <div className="injury-grid">
         {game.teams.map((team, teamIndex) => {
           const availability = game.injuries[teamIndex];
-          const visibleAvailability = availability.slice(0, 8);
+          const impactAvailability = availability.filter((item) => item.availabilityRole !== "Depth");
+          const visibleAvailability = (impactAvailability.length ? impactAvailability : availability).slice(0, 8);
+          const hiddenImpactCount = Math.max(0, impactAvailability.length - visibleAvailability.length);
+          const hiddenDepthCount = availability.filter((item) => item.availabilityRole === "Depth").length;
+          const hiddenCount = availability.length - visibleAvailability.length;
 
           return (
             <div className="injury-team-card" key={`${game.id}-${team.abbreviation}-availability`}>
               <div className="injury-team-heading">
                 <TeamBadge team={team} />
                 <strong>{team.name}</strong>
-                <span>{availability.length} flagged</span>
+                <span>{impactAvailability.length} impact / {availability.length} flagged</span>
               </div>
 
               {visibleAvailability.length ? (
                 <div className="injury-list">
-                  {visibleAvailability.map((item, itemIndex) => (
-                    <div className="injury-line" key={`${item.player}-${itemIndex}`}>
-                      <div>
-                        <strong>{item.player}</strong>
-                        <span className="injury-position">{item.position}</span>
+                  {visibleAvailability.map((item, itemIndex) => {
+                    const roleClass = item.availabilityRole?.toLowerCase() || "roster";
+                    return (
+                      <div className="injury-line" key={`${item.player}-${itemIndex}`}>
+                        <div>
+                          <strong>{item.player}</strong>
+                          <span className="injury-position">{item.position}</span>
+                          <span className={`availability-role availability-role-${roleClass}`}>
+                            {item.availabilityRole || "Roster"}
+                          </span>
+                        </div>
+                        <div className="injury-meta">
+                          <span className="injury-status">{item.status}</span>
+                          {item.detail && <span>{item.detail}</span>}
+                        </div>
                       </div>
-                      <div className="injury-meta">
-                        <span className="injury-status">{item.status}</span>
-                        {item.detail && <span>{item.detail}</span>}
-                      </div>
+                    );
+                  })}
+                  {hiddenCount > 0 && (
+                    <div className="injury-more">
+                      {hiddenImpactCount > 0 && `+${hiddenImpactCount} more impact player${hiddenImpactCount === 1 ? "" : "s"}`}
+                      {hiddenImpactCount > 0 && hiddenDepthCount > 0 && " · "}
+                      {hiddenDepthCount > 0 && `+${hiddenDepthCount} depth player${hiddenDepthCount === 1 ? "" : "s"} flagged`}
                     </div>
-                  ))}
-                  {availability.length > visibleAvailability.length && (
-                    <div className="injury-more">+{availability.length - visibleAvailability.length} more flagged</div>
                   )}
                 </div>
               ) : (
