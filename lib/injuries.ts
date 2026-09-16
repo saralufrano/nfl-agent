@@ -1,4 +1,4 @@
-import type { Injury, WeekData } from "@/lib/nfl-types";
+import type { AvailabilityRole, Injury, WeekData } from "@/lib/nfl-types";
 
 const SLEEPER_PLAYERS = "https://api.sleeper.app/v1/players/nfl";
 const SIX_HOURS = 60 * 60 * 6;
@@ -17,6 +17,8 @@ type SleeperPlayer = {
   injury_notes?: string | null;
   practice_participation?: string | null;
   practice_description?: string | null;
+  depth_chart_order?: number | null;
+  depth_chart_position?: string | null;
 };
 
 type SleeperPlayersPayload = Record<string, SleeperPlayer>;
@@ -43,6 +45,19 @@ function clean(value: string | null | undefined) {
 function isFullPractice(value: string | null | undefined) {
   const normalized = value?.trim().toLowerCase();
   return !normalized || normalized === "full" || normalized === "fp" || normalized === "full participation";
+}
+
+function playerName(player: SleeperPlayer) {
+  return (
+    clean(player.full_name) ||
+    [clean(player.first_name), clean(player.last_name)].filter(Boolean).join(" ") ||
+    "Unknown player"
+  );
+}
+
+function isUsablePlayer(player: SleeperPlayer) {
+  const name = playerName(player).toLowerCase();
+  return name !== "duplicate player" && name !== "unknown player";
 }
 
 function isAvailabilityConcern(player: SleeperPlayer) {
@@ -75,12 +90,15 @@ function availabilityStatus(player: SleeperPlayer) {
   return "Injury watch";
 }
 
-function normalizeSleeperPlayer(player: SleeperPlayer): Injury {
-  const playerName =
-    clean(player.full_name) ||
-    [clean(player.first_name), clean(player.last_name)].filter(Boolean).join(" ") ||
-    "Unknown player";
+function availabilityRole(player: SleeperPlayer): AvailabilityRole {
+  const order = player.depth_chart_order;
+  if (order === 1) return "Starter";
+  if (order === 2) return "Rotation";
+  if (typeof order === "number" && order >= 3) return "Depth";
+  return "Roster";
+}
 
+function normalizeSleeperPlayer(player: SleeperPlayer): Injury {
   const details = [
     clean(player.injury_body_part),
     clean(player.injury_notes),
@@ -90,10 +108,13 @@ function normalizeSleeperPlayer(player: SleeperPlayer): Injury {
   ].filter((value): value is string => Boolean(value));
 
   return {
-    player: playerName,
+    player: playerName(player),
     position: clean(player.position) || "—",
     status: availabilityStatus(player),
     detail: details.length ? [...new Set(details)].join(" · ") : null,
+    availabilityRole: availabilityRole(player),
+    depthChartOrder: player.depth_chart_order ?? null,
+    depthChartPosition: clean(player.depth_chart_position),
   };
 }
 
@@ -115,6 +136,13 @@ function availabilityPriority(status: string) {
   return 4;
 }
 
+function rolePriority(role: AvailabilityRole | undefined) {
+  if (role === "Starter") return 0;
+  if (role === "Rotation") return 1;
+  if (role === "Roster") return 2;
+  return 3;
+}
+
 async function fetchSleeperAvailability(): Promise<Map<string, Injury[]>> {
   try {
     const response = await fetch(SLEEPER_PLAYERS, {
@@ -132,7 +160,7 @@ async function fetchSleeperAvailability(): Promise<Map<string, Injury[]>> {
 
     for (const player of Object.values(payload)) {
       const team = normalizeTeam(player.team);
-      if (!team || !isAvailabilityConcern(player)) continue;
+      if (!team || !isUsablePlayer(player) || !isAvailabilityConcern(player)) continue;
 
       const current = byTeam.get(team) || [];
       current.push(normalizeSleeperPlayer(player));
@@ -142,7 +170,9 @@ async function fetchSleeperAvailability(): Promise<Map<string, Injury[]>> {
     for (const [team, players] of byTeam) {
       players.sort(
         (a, b) =>
+          rolePriority(a.availabilityRole) - rolePriority(b.availabilityRole) ||
           availabilityPriority(a.status) - availabilityPriority(b.status) ||
+          (a.depthChartOrder ?? 99) - (b.depthChartOrder ?? 99) ||
           a.position.localeCompare(b.position) ||
           a.player.localeCompare(b.player),
       );
