@@ -200,15 +200,25 @@ async function fetchTeamAvailabilityNews(teamId: string): Promise<AvailabilityNo
   }
 }
 
+function newsRows(notes: AvailabilityNote[]): Injury[] {
+  return notes.map((note) => ({
+    player: note.headline,
+    position: "NEWS",
+    status: "Availability watch",
+    detail: note.detail,
+  }));
+}
+
 async function fetchTeamAvailability(abbreviation: string): Promise<TeamAvailabilityData> {
   const teamId = ESPN_TEAM_IDS[abbreviation.toUpperCase()];
   if (!teamId) return { injuries: [], notes: [] };
 
-  const [injuries, notes] = await Promise.all([
+  const [officialInjuries, notes] = await Promise.all([
     fetchTeamInjuries(teamId),
     fetchTeamAvailabilityNews(teamId),
   ]);
 
+  const injuries = officialInjuries.length ? officialInjuries : newsRows(notes);
   return { injuries, notes };
 }
 
