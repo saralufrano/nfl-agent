@@ -211,7 +211,8 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   const hasNextWeek = weekIndex < weeks.length - 1;
 
   function togglePick(game: Game, team: Team) {
-    if (game.completed || team.spread === null) return;
+    const lockedSpread = team.spread;
+    if (game.completed || lockedSpread === null) return;
 
     setPicks((current) => {
       const next = { ...current };
@@ -222,7 +223,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
       } else {
         next[game.id] = {
           teamAbbreviation: team.abbreviation,
-          lockedSpread: team.spread,
+          lockedSpread,
           week: week.number,
           pickedAt: new Date().toISOString(),
         };
