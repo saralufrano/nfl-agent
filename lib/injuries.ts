@@ -95,7 +95,11 @@ function availabilityRole(player: SleeperPlayer): AvailabilityRole {
   if (order === 1) return "Starter";
   if (order === 2) return "Rotation";
   if (typeof order === "number" && order >= 3) return "Depth";
-  return "Roster";
+
+  // Sleeper knows this player is on the roster, but cannot establish a
+  // meaningful depth-chart role. For this matchup tool, treat that as depth
+  // so it stays out of the default impact view.
+  return "Depth";
 }
 
 function normalizeSleeperPlayer(player: SleeperPlayer): Injury {
