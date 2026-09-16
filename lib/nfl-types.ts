@@ -6,11 +6,16 @@ export type Team = {
   color: string;
 };
 
+export type AvailabilityRole = "Starter" | "Rotation" | "Roster" | "Depth";
+
 export type Injury = {
   player: string;
   position: string;
   status: string;
   detail: string | null;
+  availabilityRole?: AvailabilityRole;
+  depthChartOrder?: number | null;
+  depthChartPosition?: string | null;
 };
 
 export type AvailabilityNote = {
