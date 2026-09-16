@@ -1,4 +1,4 @@
-import type { Injury, WeekData } from "@/lib/nfl-types";
+import type { AvailabilityNote, Injury, WeekData } from "@/lib/nfl-types";
 
 const ESPN_TEAMS = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams";
 
@@ -80,6 +80,24 @@ type TeamInjuryPayload = {
   items?: unknown[];
 };
 
+type RawNewsArticle = {
+  headline?: string;
+  description?: string;
+  published?: string;
+};
+
+type TeamNewsPayload = {
+  articles?: RawNewsArticle[];
+};
+
+type TeamAvailabilityData = {
+  injuries: Injury[];
+  notes: AvailabilityNote[];
+};
+
+const INJURY_NEWS_PATTERN =
+  /injur|hurt|out\b|miss(?:es|ing|ed)?\b|sidelined|questionable|doubtful|inactive|ruled out|return timetable|expected to miss|will not play|won't play/i;
+
 function statusText(status: RawStatus | undefined) {
   if (typeof status === "string") return status;
   return (
@@ -103,7 +121,6 @@ function extractRawInjuries(payload: TeamInjuryPayload): RawInjury[] {
   const direct = candidates.filter(looksLikeInjury);
   if (direct.length) return direct;
 
-  // Some ESPN responses group injuries one level deeper.
   return candidates.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object") return [];
     const nested = (candidate as { injuries?: unknown[] }).injuries || [];
@@ -138,13 +155,17 @@ function injuryPriority(status: string) {
   return 4;
 }
 
-async function fetchTeamInjuries(abbreviation: string): Promise<Injury[]> {
-  const teamId = ESPN_TEAM_IDS[abbreviation.toUpperCase()];
-  if (!teamId) return [];
+function recentEnough(published: string | undefined) {
+  if (!published) return true;
+  const timestamp = Date.parse(published);
+  if (!Number.isFinite(timestamp)) return true;
+  return Date.now() - timestamp <= 10 * 24 * 60 * 60 * 1000;
+}
 
+async function fetchTeamInjuries(teamId: string): Promise<Injury[]> {
   try {
     const response = await fetch(`${ESPN_TEAMS}/${teamId}/injuries`, {
-      next: { revalidate: 300 },
+      cache: "no-store",
     });
     if (!response.ok) return [];
 
@@ -157,6 +178,40 @@ async function fetchTeamInjuries(abbreviation: string): Promise<Injury[]> {
   }
 }
 
+async function fetchTeamAvailabilityNews(teamId: string): Promise<AvailabilityNote[]> {
+  try {
+    const response = await fetch(`${ESPN_TEAMS}/${teamId}/news?limit=20`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+
+    const payload = (await response.json()) as TeamNewsPayload;
+    return (payload.articles || [])
+      .filter((article) => recentEnough(article.published))
+      .filter((article) => INJURY_NEWS_PATTERN.test(`${article.headline || ""} ${article.description || ""}`))
+      .slice(0, 4)
+      .map((article) => ({
+        headline: article.headline || "Injury update",
+        detail: article.description || null,
+        published: article.published || null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchTeamAvailability(abbreviation: string): Promise<TeamAvailabilityData> {
+  const teamId = ESPN_TEAM_IDS[abbreviation.toUpperCase()];
+  if (!teamId) return { injuries: [], notes: [] };
+
+  const [injuries, notes] = await Promise.all([
+    fetchTeamInjuries(teamId),
+    fetchTeamAvailabilityNews(teamId),
+  ]);
+
+  return { injuries, notes };
+}
+
 export async function enrichWeeksWithCurrentInjuries(weeks: WeekData[]): Promise<WeekData[]> {
   const upcomingTeams = new Set(
     weeks
@@ -164,19 +219,25 @@ export async function enrichWeeksWithCurrentInjuries(weeks: WeekData[]): Promise
       .flatMap((week) => week.games.flatMap((game) => game.teams.map((team) => team.abbreviation.toUpperCase()))),
   );
 
-  const injuryEntries = await Promise.all(
-    [...upcomingTeams].map(async (abbreviation) => [abbreviation, await fetchTeamInjuries(abbreviation)] as const),
+  const entries = await Promise.all(
+    [...upcomingTeams].map(async (abbreviation) => [abbreviation, await fetchTeamAvailability(abbreviation)] as const),
   );
-  const injuryMap = new Map(injuryEntries);
+  const availabilityMap = new Map(entries);
 
   return weeks.map((week) => ({
     ...week,
-    games: week.games.map((game) => ({
-      ...game,
-      injuries: [
-        injuryMap.get(game.teams[0].abbreviation.toUpperCase()) || game.injuries[0],
-        injuryMap.get(game.teams[1].abbreviation.toUpperCase()) || game.injuries[1],
-      ],
-    })),
+    games: week.games.map((game) => {
+      const away = availabilityMap.get(game.teams[0].abbreviation.toUpperCase());
+      const home = availabilityMap.get(game.teams[1].abbreviation.toUpperCase());
+
+      return {
+        ...game,
+        injuries: [
+          away?.injuries.length ? away.injuries : game.injuries[0],
+          home?.injuries.length ? home.injuries : game.injuries[1],
+        ],
+        availabilityNotes: [away?.notes || [], home?.notes || []],
+      };
+    }),
   }));
 }
