@@ -1,253 +1,172 @@
-import type { AvailabilityNote, Injury, WeekData } from "@/lib/nfl-types";
+import type { Injury, WeekData } from "@/lib/nfl-types";
 
-const ESPN_TEAMS = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams";
+const SLEEPER_PLAYERS = "https://api.sleeper.app/v1/players/nfl";
+const SIX_HOURS = 60 * 60 * 6;
 
-const ESPN_TEAM_IDS: Record<string, string> = {
-  ARI: "22",
-  ATL: "1",
-  BAL: "33",
-  BUF: "2",
-  CAR: "29",
-  CHI: "3",
-  CIN: "4",
-  CLE: "5",
-  DAL: "6",
-  DEN: "7",
-  DET: "8",
-  GB: "9",
-  HOU: "34",
-  IND: "11",
-  JAX: "30",
-  KC: "12",
-  LV: "13",
-  LAC: "24",
-  LAR: "14",
-  MIA: "15",
-  MIN: "16",
-  NE: "17",
-  NO: "18",
-  NYG: "19",
-  NYJ: "20",
-  PHI: "21",
-  PIT: "23",
-  SF: "25",
-  SEA: "26",
-  TB: "27",
-  TEN: "10",
-  WSH: "28",
+type SleeperPlayer = {
+  full_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  team?: string | null;
+  position?: string | null;
+  active?: boolean | null;
+  status?: string | null;
+  injury_status?: string | null;
+  injury_body_part?: string | null;
+  injury_start_date?: string | null;
+  injury_notes?: string | null;
+  practice_participation?: string | null;
+  practice_description?: string | null;
 };
 
-type RawStatus =
-  | string
-  | {
-      name?: string;
-      description?: string;
-      type?: {
-        name?: string;
-        description?: string;
-        abbreviation?: string;
-      };
-    };
+type SleeperPlayersPayload = Record<string, SleeperPlayer>;
 
-type RawInjury = {
-  athlete?: {
-    fullName?: string;
-    displayName?: string;
-    shortName?: string;
-    position?: {
-      abbreviation?: string;
-      name?: string;
-    };
-  };
-  status?: RawStatus;
-  type?: {
-    name?: string;
-    description?: string;
-    abbreviation?: string;
-  };
-  details?: {
-    type?: string;
-    detail?: string;
-    location?: string;
-    side?: string;
-  };
-  shortComment?: string;
-  longComment?: string;
+const TEAM_ALIASES: Record<string, string> = {
+  WAS: "WSH",
+  JAC: "JAX",
+  OAK: "LV",
+  SD: "LAC",
+  STL: "LAR",
 };
 
-type TeamInjuryPayload = {
-  injuries?: unknown[];
-  items?: unknown[];
-};
+function normalizeTeam(value: string | null | undefined) {
+  if (!value) return null;
+  const abbreviation = value.toUpperCase();
+  return TEAM_ALIASES[abbreviation] || abbreviation;
+}
 
-type RawNewsArticle = {
-  headline?: string;
-  description?: string;
-  published?: string;
-};
+function clean(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
 
-type TeamNewsPayload = {
-  articles?: RawNewsArticle[];
-};
+function isFullPractice(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  return !normalized || normalized === "full" || normalized === "fp" || normalized === "full participation";
+}
 
-type TeamAvailabilityData = {
-  injuries: Injury[];
-  notes: AvailabilityNote[];
-};
+function isAvailabilityConcern(player: SleeperPlayer) {
+  const rosterStatus = clean(player.status)?.toLowerCase();
 
-const INJURY_NEWS_PATTERN =
-  /injur|hurt|out\b|miss(?:es|ing|ed)?\b|sidelined|questionable|doubtful|inactive|ruled out|return timetable|expected to miss|will not play|won't play/i;
-
-function statusText(status: RawStatus | undefined) {
-  if (typeof status === "string") return status;
-  return (
-    status?.name ||
-    status?.description ||
-    status?.type?.name ||
-    status?.type?.description ||
-    status?.type?.abbreviation ||
-    "Injury report"
+  return Boolean(
+    clean(player.injury_status) ||
+      clean(player.injury_notes) ||
+      clean(player.injury_body_part) ||
+      !isFullPractice(player.practice_participation) ||
+      clean(player.practice_description) ||
+      (rosterStatus && rosterStatus !== "active") ||
+      player.active === false,
   );
 }
 
-function looksLikeInjury(value: unknown): value is RawInjury {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as RawInjury;
-  return Boolean(candidate.athlete?.fullName || candidate.athlete?.displayName || candidate.athlete?.shortName);
+function availabilityStatus(player: SleeperPlayer) {
+  const injuryStatus = clean(player.injury_status);
+  if (injuryStatus) return injuryStatus;
+
+  const rosterStatus = clean(player.status);
+  if (rosterStatus && rosterStatus.toLowerCase() !== "active") return rosterStatus;
+
+  const practiceDescription = clean(player.practice_description);
+  if (practiceDescription) return practiceDescription;
+
+  const practiceParticipation = clean(player.practice_participation);
+  if (practiceParticipation && !isFullPractice(practiceParticipation)) return practiceParticipation;
+
+  return "Injury watch";
 }
 
-function extractRawInjuries(payload: TeamInjuryPayload): RawInjury[] {
-  const candidates = [...(payload.injuries || []), ...(payload.items || [])];
-  const direct = candidates.filter(looksLikeInjury);
-  if (direct.length) return direct;
+function normalizeSleeperPlayer(player: SleeperPlayer): Injury {
+  const playerName =
+    clean(player.full_name) ||
+    [clean(player.first_name), clean(player.last_name)].filter(Boolean).join(" ") ||
+    "Unknown player";
 
-  return candidates.flatMap((candidate) => {
-    if (!candidate || typeof candidate !== "object") return [];
-    const nested = (candidate as { injuries?: unknown[] }).injuries || [];
-    return nested.filter(looksLikeInjury);
-  });
-}
-
-function normalizeInjury(injury: RawInjury): Injury {
-  const detailParts = [
-    injury.details?.type,
-    injury.details?.detail,
-    injury.details?.location,
-    injury.type?.description,
-    injury.shortComment,
-    injury.longComment,
+  const details = [
+    clean(player.injury_body_part),
+    clean(player.injury_notes),
+    clean(player.practice_description),
+    !isFullPractice(player.practice_participation) ? clean(player.practice_participation) : null,
+    clean(player.injury_start_date) ? `Since ${clean(player.injury_start_date)}` : null,
   ].filter((value): value is string => Boolean(value));
 
   return {
-    player: injury.athlete?.fullName || injury.athlete?.displayName || injury.athlete?.shortName || "Unknown player",
-    position: injury.athlete?.position?.abbreviation || "—",
-    status: statusText(injury.status),
-    detail: detailParts.length ? [...new Set(detailParts)].join(" · ") : null,
+    player: playerName,
+    position: clean(player.position) || "—",
+    status: availabilityStatus(player),
+    detail: details.length ? [...new Set(details)].join(" · ") : null,
   };
 }
 
-function injuryPriority(status: string) {
+function availabilityPriority(status: string) {
   const normalized = status.toLowerCase();
-  if (normalized.includes("out") || normalized.includes("injured reserve") || normalized === "ir") return 0;
+  if (
+    normalized.includes("out") ||
+    normalized.includes("injured reserve") ||
+    normalized === "ir" ||
+    normalized.includes("pup") ||
+    normalized.includes("inactive")
+  ) {
+    return 0;
+  }
   if (normalized.includes("doubtful")) return 1;
   if (normalized.includes("questionable")) return 2;
-  if (normalized.includes("probable")) return 3;
+  if (normalized.includes("did not practice") || normalized === "dnp") return 2;
+  if (normalized.includes("limited")) return 3;
   return 4;
 }
 
-function recentEnough(published: string | undefined) {
-  if (!published) return true;
-  const timestamp = Date.parse(published);
-  if (!Number.isFinite(timestamp)) return true;
-  return Date.now() - timestamp <= 10 * 24 * 60 * 60 * 1000;
-}
-
-async function fetchTeamInjuries(teamId: string): Promise<Injury[]> {
+async function fetchSleeperAvailability(): Promise<Map<string, Injury[]>> {
   try {
-    const response = await fetch(`${ESPN_TEAMS}/${teamId}/injuries`, {
-      cache: "no-store",
+    const response = await fetch(SLEEPER_PLAYERS, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "nfl-game-tracker/1.0",
+      },
+      next: { revalidate: SIX_HOURS },
     });
-    if (!response.ok) return [];
 
-    const payload = (await response.json()) as TeamInjuryPayload;
-    return extractRawInjuries(payload)
-      .map(normalizeInjury)
-      .sort((a, b) => injuryPriority(a.status) - injuryPriority(b.status) || a.player.localeCompare(b.player));
+    if (!response.ok) return new Map();
+
+    const payload = (await response.json()) as SleeperPlayersPayload;
+    const byTeam = new Map<string, Injury[]>();
+
+    for (const player of Object.values(payload)) {
+      const team = normalizeTeam(player.team);
+      if (!team || !isAvailabilityConcern(player)) continue;
+
+      const current = byTeam.get(team) || [];
+      current.push(normalizeSleeperPlayer(player));
+      byTeam.set(team, current);
+    }
+
+    for (const [team, players] of byTeam) {
+      players.sort(
+        (a, b) =>
+          availabilityPriority(a.status) - availabilityPriority(b.status) ||
+          a.position.localeCompare(b.position) ||
+          a.player.localeCompare(b.player),
+      );
+      byTeam.set(team, players);
+    }
+
+    return byTeam;
   } catch {
-    return [];
+    return new Map();
   }
 }
 
-async function fetchTeamAvailabilityNews(teamId: string): Promise<AvailabilityNote[]> {
-  try {
-    const response = await fetch(`${ESPN_TEAMS}/${teamId}/news?limit=20`, {
-      cache: "no-store",
-    });
-    if (!response.ok) return [];
-
-    const payload = (await response.json()) as TeamNewsPayload;
-    return (payload.articles || [])
-      .filter((article) => recentEnough(article.published))
-      .filter((article) => INJURY_NEWS_PATTERN.test(`${article.headline || ""} ${article.description || ""}`))
-      .slice(0, 4)
-      .map((article) => ({
-        headline: article.headline || "Injury update",
-        detail: article.description || null,
-        published: article.published || null,
-      }));
-  } catch {
-    return [];
-  }
-}
-
-function newsRows(notes: AvailabilityNote[]): Injury[] {
-  return notes.map((note) => ({
-    player: note.headline,
-    position: "NEWS",
-    status: "Availability watch",
-    detail: note.detail,
-  }));
-}
-
-async function fetchTeamAvailability(abbreviation: string): Promise<TeamAvailabilityData> {
-  const teamId = ESPN_TEAM_IDS[abbreviation.toUpperCase()];
-  if (!teamId) return { injuries: [], notes: [] };
-
-  const [officialInjuries, notes] = await Promise.all([
-    fetchTeamInjuries(teamId),
-    fetchTeamAvailabilityNews(teamId),
-  ]);
-
-  const injuries = officialInjuries.length ? officialInjuries : newsRows(notes);
-  return { injuries, notes };
-}
-
-export async function enrichWeeksWithCurrentInjuries(weeks: WeekData[]): Promise<WeekData[]> {
-  const upcomingTeams = new Set(
-    weeks
-      .filter((week) => week.status === "Upcoming")
-      .flatMap((week) => week.games.flatMap((game) => game.teams.map((team) => team.abbreviation.toUpperCase()))),
-  );
-
-  const entries = await Promise.all(
-    [...upcomingTeams].map(async (abbreviation) => [abbreviation, await fetchTeamAvailability(abbreviation)] as const),
-  );
-  const availabilityMap = new Map(entries);
+export async function enrichWeeksWithAvailabilityWatch(weeks: WeekData[]): Promise<WeekData[]> {
+  const availabilityMap = await fetchSleeperAvailability();
 
   return weeks.map((week) => ({
     ...week,
-    games: week.games.map((game) => {
-      const away = availabilityMap.get(game.teams[0].abbreviation.toUpperCase());
-      const home = availabilityMap.get(game.teams[1].abbreviation.toUpperCase());
-
-      return {
-        ...game,
-        injuries: [
-          away?.injuries.length ? away.injuries : game.injuries[0],
-          home?.injuries.length ? home.injuries : game.injuries[1],
-        ],
-        availabilityNotes: [away?.notes || [], home?.notes || []],
-      };
-    }),
+    games: week.games.map((game) => ({
+      ...game,
+      injuries: [
+        availabilityMap.get(normalizeTeam(game.teams[0].abbreviation) || "") || [],
+        availabilityMap.get(normalizeTeam(game.teams[1].abbreviation) || "") || [],
+      ],
+      availabilityNotes: undefined,
+    })),
   }));
 }
