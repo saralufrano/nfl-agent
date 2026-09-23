@@ -5,23 +5,49 @@
   background: #fbfcff;
 }
 
+/*
+ * The compare drawer sits immediately after each game row. Keep the control
+ * attached to that drawer logically, but visually pull it up into the white
+ * Score column so it reads as part of the matchup row instead of a separate
+ * gray action bar.
+ */
+.comparison-drawer {
+  position: relative;
+}
+
 .comparison-toggle {
+  position: absolute;
+  z-index: 2;
+  top: -42px;
+  left: 289px;
+  transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin: 0;
   border: 1px solid #cfd8e6;
   border-radius: 999px;
   background: white;
-  padding: 8px 13px;
+  padding: 6px 10px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 33, 59, 0.05);
 }
 
 .comparison-toggle:hover {
   background: #f1f5fa;
+}
+
+/* When collapsed, the drawer itself should take up no gray space. */
+.comparison-drawer:has(.comparison-toggle[aria-expanded="false"]) {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+  background: white;
 }
 
 .comparison-panel {
