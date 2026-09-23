@@ -36,6 +36,41 @@ function periodLabel(periodIndex: number) {
   return periodIndex === 4 ? "OT" : `Q${periodIndex + 1}`;
 }
 
+function formatKickoff(kickoff: string | null | undefined) {
+  if (!kickoff) return "Time TBD";
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(kickoff));
+  } catch {
+    return "Time TBD";
+  }
+}
+
+function rankLabel(rank: number | null | undefined) {
+  return rank ? `#${rank}` : "—";
+}
+
+function TeamIdentity({ team }: { team: Team }) {
+  return (
+    <>
+      <TeamBadge team={team} />
+      <span style={{ display: "flex", minWidth: 0, flexDirection: "column", gap: 2 }}>
+        <strong>{team.name}</strong>
+        <span style={{ color: "#66738a", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+          {team.record || "0-0"} · Off {rankLabel(team.offenseRank)} · Def {rankLabel(team.defenseRank)}
+        </span>
+      </span>
+    </>
+  );
+}
+
 function gradePick(game: Game, pick: PickRecord | undefined): PickGrade {
   if (!pick || !game.completed) return null;
 
@@ -206,7 +241,7 @@ function AvailabilityWatch({ game }: { game: Game }) {
 }
 
 export function Dashboard({ weeks }: { weeks: WeekData[] }) {
-  const [weekIndex, setWeekIndex] = useState(0);
+  const [weekIndex, setWeekIndex] = useState(Math.max(0, weeks.length - 1));
   const [picks, setPicks] = useState<Record<string, PickRecord>>({});
   const [expandedComparisons, setExpandedComparisons] = useState<Record<string, boolean>>({});
 
@@ -256,6 +291,8 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
     return <main className="tracker-shell">No NFL data available.</main>;
   }
 
+  const latestWeek = weekIndex === weeks.length - 1;
+
   return (
     <main className="tracker-shell">
       <section className="week-card">
@@ -304,15 +341,37 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
             const comparisonOpen = Boolean(expandedComparisons[game.id]);
             const savedPick = picks[game.id];
             const pickGrade = gradePick(game, savedPick);
+            const weatherText = game.weather?.summary || (game.venue?.indoor ? "Indoor" : "Weather pending");
 
             return (
               <Fragment key={game.id}>
+                <div
+                  style={{
+                    display: "flex",
+                    minWidth: 1645,
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 36px 0",
+                    color: "#516078",
+                    background: "#fff",
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                >
+                  <span>{formatKickoff(game.kickoff)}</span>
+                  {latestWeek && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{weatherText}</span>
+                    </>
+                  )}
+                </div>
+
                 <div className="tracker-grid game-row">
                   <div className="team-stack">
                     {game.teams.map((team) => (
                       <div className="team-line" key={team.abbreviation}>
-                        <TeamBadge team={team} />
-                        <strong>{team.name}</strong>
+                        <TeamIdentity team={team} />
                       </div>
                     ))}
                   </div>
@@ -433,7 +492,7 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
         <span>NFL Game Tracker</span>
         <span>Work in progress</span>
         <span>Go Niners ❤️</span>
-        <span className="footer-note">Live NFL data + ESPN odds + Sleeper availability. Picks are saved in this browser.</span>
+        <span className="footer-note">Live NFL data + ESPN odds + Sleeper availability + Open-Meteo weather. Picks are saved in this browser.</span>
       </footer>
     </main>
   );
