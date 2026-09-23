@@ -18,7 +18,7 @@
 .comparison-toggle {
   position: absolute;
   z-index: 2;
-  top: -42px;
+  top: -32px;
   left: 289px;
   transform: translateX(-50%);
   display: inline-flex;
@@ -38,7 +38,8 @@
   box-shadow: 0 1px 2px rgba(16, 33, 59, 0.05);
 }
 
-.comparison-toggle:hover {
+.comparison-toggle:hover,
+.history-comparison-toggle:hover {
   background: #f1f5fa;
 }
 
@@ -48,6 +49,69 @@
   padding-bottom: 0;
   border-bottom: 0;
   background: white;
+}
+
+.comparison-history-level {
+  min-width: 0;
+}
+
+/* The two teams' games are one historical comparison, so visually group them. */
+.comparison-game-group {
+  display: grid;
+  gap: 0;
+}
+
+.comparison-game-group .comparison-game {
+  margin-top: 0;
+  border-radius: 0;
+}
+
+.comparison-game-group .comparison-game:first-child {
+  border-radius: 12px 12px 0 0;
+}
+
+.comparison-game-group .comparison-game + .comparison-game {
+  border-top: 0;
+}
+
+.comparison-game-group .comparison-game:last-child {
+  border-radius: 0 0 12px 12px;
+}
+
+.history-comparison-control {
+  position: relative;
+  min-height: 44px;
+}
+
+.history-comparison-toggle {
+  position: absolute;
+  top: 9px;
+  left: 289px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #cfd8e6;
+  border-radius: 999px;
+  background: white;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 33, 59, 0.05);
+}
+
+.history-comparison-nested {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #dfe5ee;
+}
+
+.history-comparison-nested .comparison-drawer-title {
+  margin-top: 0;
 }
 
 .comparison-panel {
