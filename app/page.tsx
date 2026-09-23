@@ -1,4 +1,4 @@
-import { Dashboard } from "@/components/dashboard";
+import { PersistedDashboard } from "@/components/persisted-dashboard";
 import { fetchNflWeek } from "@/lib/espn";
 import { enrichWeeksWithAvailabilityWatch } from "@/lib/injuries";
 import { enrichWeeksWithMatchupContext, fetchCurrentNflWeekNumber } from "@/lib/matchup-context";
@@ -11,5 +11,5 @@ export default async function Home() {
   const weeks = await Promise.all(weekNumbers.map(fetchNflWeek));
   const weeksWithContext = await enrichWeeksWithMatchupContext(weeks);
   const weeksWithAvailability = await enrichWeeksWithAvailabilityWatch(weeksWithContext);
-  return <Dashboard weeks={weeksWithAvailability} />;
+  return <PersistedDashboard weeks={weeksWithAvailability} />;
 }
