@@ -180,6 +180,66 @@ function PreviousWeekGame({
   );
 }
 
+function HistoricalWeekComparison({
+  weeks,
+  weekIndex,
+  abbreviations,
+}: {
+  weeks: WeekData[];
+  weekIndex: number;
+  abbreviations: [string, string];
+}) {
+  const [olderOpen, setOlderOpen] = useState(false);
+  const historicalWeek = weeks[weekIndex];
+  const olderWeek = weekIndex > 0 ? weeks[weekIndex - 1] : undefined;
+
+  if (!historicalWeek) return null;
+
+  return (
+    <div className="comparison-history-level">
+      <div className="comparison-drawer-title">
+        How each team did against its Week {historicalWeek.number} opponent
+      </div>
+
+      <div className="comparison-game-group">
+        {abbreviations.map((abbreviation) => (
+          <PreviousWeekGame
+            key={`${historicalWeek.number}-${abbreviation}-previous`}
+            previousWeek={historicalWeek}
+            abbreviation={abbreviation}
+          />
+        ))}
+      </div>
+
+      {olderWeek && (
+        <>
+          <div className="history-comparison-control">
+            <button
+              className="history-comparison-toggle"
+              type="button"
+              aria-expanded={olderOpen}
+              onClick={() => setOlderOpen((current) => !current)}
+            >
+              {olderOpen ? "Hide" : "Compare"} Week {olderWeek.number}
+              <span aria-hidden="true">{olderOpen ? "▴" : "▾"}</span>
+            </button>
+          </div>
+
+          {olderOpen && (
+            <div className="history-comparison-nested">
+              <HistoricalWeekComparison
+                weeks={weeks}
+                weekIndex={weekIndex - 1}
+                abbreviations={abbreviations}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function AvailabilityWatch({ game }: { game: Game }) {
   return (
     <section className="injury-panel">
@@ -468,16 +528,11 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
                     {comparisonOpen && (
                       <div>
                         <AvailabilityWatch game={game} />
-                        <div className="comparison-drawer-title">
-                          How each team did against its Week {previousWeek.number} opponent
-                        </div>
-                        {game.teams.map((team) => (
-                          <PreviousWeekGame
-                            key={`${game.id}-${team.abbreviation}-previous`}
-                            previousWeek={previousWeek}
-                            abbreviation={team.abbreviation}
-                          />
-                        ))}
+                        <HistoricalWeekComparison
+                          weeks={weeks}
+                          weekIndex={weekIndex - 1}
+                          abbreviations={[game.teams[0].abbreviation, game.teams[1].abbreviation]}
+                        />
                       </div>
                     )}
                   </div>
