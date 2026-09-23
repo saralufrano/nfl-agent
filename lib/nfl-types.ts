@@ -4,6 +4,9 @@ export type Team = {
   score: number | null;
   spread: number | null;
   color: string;
+  record?: string | null;
+  offenseRank?: number | null;
+  defenseRank?: number | null;
 };
 
 export type AvailabilityRole = "Starter" | "Rotation" | "Roster" | "Depth";
@@ -24,6 +27,22 @@ export type AvailabilityNote = {
   published: string | null;
 };
 
+export type Venue = {
+  name: string | null;
+  city: string | null;
+  state: string | null;
+  indoor: boolean;
+};
+
+export type GameWeather = {
+  summary: string;
+  condition: string | null;
+  temperatureF: number | null;
+  precipitationProbability: number | null;
+  windMph: number | null;
+  indoor: boolean;
+};
+
 export type Quarter = [string[], string[]];
 export type TeamPointTotals = [number | null, number | null];
 export type TeamInjuries = [Injury[], Injury[]];
@@ -39,6 +58,9 @@ export type Game = {
   availabilityNotes?: TeamAvailability;
   completed: boolean;
   oddsProvider: string | null;
+  kickoff?: string | null;
+  venue?: Venue | null;
+  weather?: GameWeather | null;
 };
 
 export type WeekData = {
