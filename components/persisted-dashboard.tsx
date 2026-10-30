@@ -121,13 +121,21 @@ export function PersistedDashboard({ weeks }: { weeks: WeekData[] }) {
         setDatabaseConfigured(configured);
 
         if (configured) {
-          const databasePicks = addFinalResults(weeks, database.picks || {});
+          const rawDatabasePicks = database.picks || {};
+          const databasePicks = addFinalResults(weeks, rawDatabasePicks);
 
           // Once the database contains picks, it is the source of truth. If it
           // is empty, seed it from the browser so existing test picks migrate
           // automatically the first time Baby DB is connected.
           if (Object.keys(databasePicks).length > 0) {
             startingPicks = databasePicks;
+
+            // A completed game may have been graded while loading the tracker.
+            // Persist those newly-added results immediately instead of marking
+            // the graded browser copy as already synced and skipping the write.
+            if (JSON.stringify(databasePicks) !== JSON.stringify(rawDatabasePicks)) {
+              await saveDatabasePicks(databasePicks);
+            }
           } else if (Object.keys(browserPicks).length > 0) {
             startingPicks = browserPicks;
             await saveDatabasePicks(browserPicks);
