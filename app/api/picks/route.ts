@@ -1,20 +1,9 @@
 import { NextResponse } from "next/server";
+import { sanitizePicks } from "@/lib/pick-storage";
 
 export const dynamic = "force-dynamic";
 
 const PICKS_KEY = "nfl-game-tracker:picks:v1";
-const MAX_PICKS = 100;
-
-type StoredPick = {
-  teamAbbreviation: string;
-  lockedSpread: number;
-  week: number;
-  pickedAt: string;
-  result?: "win" | "loss" | "push" | null;
-};
-
-type StoredPicks = Record<string, StoredPick>;
-
 type RedisResponse<T> = {
   result?: T;
   error?: string;
@@ -55,40 +44,6 @@ async function redisCommand<T>(command: unknown[]): Promise<T> {
   const payload = (await response.json()) as RedisResponse<T>;
   if (payload.error) throw new Error(payload.error);
   return payload.result as T;
-}
-
-function isStoredPick(value: unknown): value is StoredPick {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const pick = value as Partial<StoredPick>;
-
-  return (
-    typeof pick.teamAbbreviation === "string" &&
-    pick.teamAbbreviation.length >= 2 &&
-    pick.teamAbbreviation.length <= 4 &&
-    typeof pick.lockedSpread === "number" &&
-    Number.isFinite(pick.lockedSpread) &&
-    typeof pick.week === "number" &&
-    Number.isInteger(pick.week) &&
-    pick.week >= 1 &&
-    pick.week <= 25 &&
-    typeof pick.pickedAt === "string" &&
-    (!pick.result || ["win", "loss", "push"].includes(pick.result))
-  );
-}
-
-function sanitizePicks(value: unknown): StoredPicks | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length > MAX_PICKS) return null;
-
-  const clean: StoredPicks = {};
-  for (const [gameId, pick] of entries) {
-    if (!gameId || gameId.length > 100 || !isStoredPick(pick)) return null;
-    clean[gameId] = pick;
-  }
-
-  return clean;
 }
 
 export async function GET() {

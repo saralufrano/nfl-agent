@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Dashboard } from "@/components/dashboard";
+import { sanitizePicks } from "@/lib/pick-storage";
 import { gradePick, type PickRecord } from "@/lib/pick-analytics";
 import type { WeekData } from "@/lib/nfl-types";
 
@@ -20,7 +21,7 @@ function readBrowserPicks(): PickMap {
     const saved = window.localStorage.getItem(PICKS_STORAGE_KEY);
     if (!saved) return {};
     const parsed = JSON.parse(saved) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as PickMap) : {};
+    return sanitizePicks(parsed) || {};
   } catch {
     return {};
   }

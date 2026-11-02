@@ -6,6 +6,8 @@ export type PickRecord = {
   week: number;
   pickedAt: string;
   result?: "win" | "loss" | "push" | null;
+  note?: string;
+  reasons?: import("./pick-storage").PickReason[];
 };
 
 export type PickGrade = "win" | "loss" | "push" | null;

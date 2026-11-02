@@ -1,558 +1,153 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Game, Team, WeekData } from "@/lib/nfl-types";
 import { formatRecord, gradePick, hitRate, summarizePicks, type PickRecord } from "@/lib/pick-analytics";
+import { MAX_PICK_NOTE_LENGTH, PICK_REASONS, sanitizePicks, type PickReason } from "@/lib/pick-storage";
+import { displayValue, MatchupDetails, ScoringDetails } from "@/components/matchup-details";
 
 const PICKS_STORAGE_KEY = "nfl-game-tracker-picks-v1";
 
-function TeamBadge({ team }: { team: Team }) {
-  return (
-    <span className="team-badge" style={{ backgroundColor: team.color }}>
-      {team.abbreviation}
-    </span>
-  );
-}
-
-function displayValue(value: number | null) {
-  return value === null ? "—" : value;
-}
-
 function formatSpread(value: number | null) {
   if (value === null) return "—";
-  if (value === 0) return "PK";
-  return value > 0 ? `+${value}` : `${value}`;
+  return value === 0 ? "PK" : value > 0 ? `+${value}` : `${value}`;
 }
 
-function periodLabel(periodIndex: number) {
-  return periodIndex === 4 ? "OT" : `Q${periodIndex + 1}`;
-}
-
-function formatKickoff(kickoff: string | null | undefined) {
+function formatKickoff(kickoff?: string | null) {
   if (!kickoff) return "Time TBD";
-
   try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Los_Angeles",
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(kickoff));
-  } catch {
-    return "Time TBD";
+    return new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(kickoff));
+  } catch { return "Time TBD"; }
+}
+
+function PickNotes({ game, pick, onChange }: { game: Game; pick: PickRecord | undefined; onChange: (changes: Partial<PickRecord>) => void }) {
+  function toggleReason(reason: PickReason) {
+    if (!pick || game.completed) return;
+    const current = pick.reasons || [];
+    onChange({ reasons: current.includes(reason) ? current.filter(item => item !== reason) : [...current, reason] });
   }
-}
-
-function rankLabel(rank: number | null | undefined) {
-  return rank ? `#${rank}` : "—";
-}
-
-function TeamIdentity({ team }: { team: Team }) {
   return (
-    <>
-      <TeamBadge team={team} />
-      <span style={{ display: "flex", minWidth: 0, flexDirection: "column", gap: 2 }}>
-        <strong>{team.name}</strong>
-        <span style={{ color: "#66738a", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-          {team.record || "0-0"} · Off {rankLabel(team.offenseRank)} · Def {rankLabel(team.defenseRank)}
-        </span>
-      </span>
-    </>
-  );
-}
-
-function findPreviousGame(week: WeekData | undefined, abbreviation: string): Game | undefined {
-  return week?.games.find((game) => game.teams.some((team) => team.abbreviation === abbreviation));
-}
-
-function PreviousWeekGame({
-  previousWeek,
-  abbreviation,
-}: {
-  previousWeek: WeekData;
-  abbreviation: string;
-}) {
-  const game = findPreviousGame(previousWeek, abbreviation);
-
-  if (!game) {
-    return <div className="comparison-missing">No Week {previousWeek.number} game found for {abbreviation}.</div>;
-  }
-
-  return (
-    <article className="comparison-game">
-      <div className="comparison-caption">
-        <strong>{abbreviation}&apos;s Week {previousWeek.number} game</strong>
-      </div>
-
-      <div className="comparison-grid comparison-header">
-        <div>Teams</div>
-        <div>Score</div>
-        <div>Q1</div>
-        <div>Q2</div>
-        <div>Q3</div>
-        <div>Q4</div>
-        <div>OT</div>
-        <div>Offensive Points</div>
-        <div>Defensive Points</div>
-      </div>
-
-      <div className="comparison-grid comparison-row">
-        <div className="team-stack">
-          {game.teams.map((team) => (
-            <div
-              className={`team-line ${team.abbreviation === abbreviation ? "comparison-team-focus" : ""}`}
-              key={team.abbreviation}
-            >
-              <TeamBadge team={team} />
-              <strong>{team.name}</strong>
-            </div>
-          ))}
-        </div>
-
-        <div className="value-stack score-stack">
-          {game.teams.map((team) => (
-            <strong key={team.abbreviation}>{displayValue(team.score)}</strong>
-          ))}
-        </div>
-
-        {game.quarters.map((teamPlays, periodIndex) => (
-          <div className="quarter-box" key={`${game.id}-${abbreviation}-${periodLabel(periodIndex)}`}>
-            {teamPlays.map((plays, teamIndex) => (
-              <div className="quarter-team-block" key={`${game.id}-${abbreviation}-${periodLabel(periodIndex)}-team${teamIndex}`}>
-                {plays.length ? (
-                  plays.map((play, playIndex) => (
-                    <div className="play-line" key={`${play}-${playIndex}`}>
-                      {play}
-                    </div>
-                  ))
-                ) : (
-                  <div className="play-line">—</div>
-                )}
-              </div>
-            ))}
+    <details className="pick-notes">
+      <summary>Why this pick? <span className="summary-hint">{pick?.note || pick?.reasons?.length ? "Note added" : "Optional"}</span><span aria-hidden="true">⌄</span></summary>
+      <div className="notes-content">
+        <div>
+          <div className="reason-tags" role="group" aria-label="Pick reasons">
+            {PICK_REASONS.map(reason => <button type="button" key={reason} disabled={!pick || game.completed} aria-pressed={pick?.reasons?.includes(reason) || false} onClick={() => toggleReason(reason)}>{reason}</button>)}
           </div>
-        ))}
-
-        <div className="total-box offense-total">
-          {game.offensivePoints.map((points, teamIndex) => (
-            <div className="total-team-block" key={`${game.id}-${abbreviation}-offense-${teamIndex}`}>
-              {displayValue(points)}
-            </div>
-          ))}
+          <p className="muted note-help">{!pick ? "Pick a team to add your reason." : game.completed ? "Your thinking when you made this pick." : "Keep your thinking with your pick, before the result."}</p>
         </div>
-
-        <div className="total-box defense-total">
-          {game.defensivePoints.map((points, teamIndex) => (
-            <div className="total-team-block" key={`${game.id}-${abbreviation}-defense-${teamIndex}`}>
-              {displayValue(points)}
-            </div>
-          ))}
-        </div>
+        <label className="note-label">Your note
+          <textarea value={pick?.note || ""} disabled={!pick || game.completed} maxLength={MAX_PICK_NOTE_LENGTH} onChange={event => onChange({ note: event.target.value })} placeholder="What’s making you lean this way?" aria-label={`Reason for ${game.teams[0].abbreviation} at ${game.teams[1].abbreviation} pick`} />
+          <span className="muted note-count">{pick?.note?.length || 0}/{MAX_PICK_NOTE_LENGTH} · Saved with your pick</span>
+        </label>
       </div>
-    </article>
-  );
-}
-
-function HistoricalWeekComparison({
-  weeks,
-  weekIndex,
-  abbreviations,
-}: {
-  weeks: WeekData[];
-  weekIndex: number;
-  abbreviations: [string, string];
-}) {
-  const [olderOpen, setOlderOpen] = useState(false);
-  const historicalWeek = weeks[weekIndex];
-  const olderWeek = weekIndex > 0 ? weeks[weekIndex - 1] : undefined;
-
-  if (!historicalWeek) return null;
-
-  return (
-    <div className="comparison-history-level">
-      <div className="comparison-drawer-title">
-        How each team did against its Week {historicalWeek.number} opponent
-      </div>
-
-      <div className="comparison-game-group">
-        {abbreviations.map((abbreviation) => (
-          <PreviousWeekGame
-            key={`${historicalWeek.number}-${abbreviation}-previous`}
-            previousWeek={historicalWeek}
-            abbreviation={abbreviation}
-          />
-        ))}
-      </div>
-
-      {olderWeek && (
-        <>
-          <div className="history-comparison-control">
-            <button
-              className="history-comparison-toggle"
-              type="button"
-              aria-expanded={olderOpen}
-              onClick={() => setOlderOpen((current) => !current)}
-            >
-              {olderOpen ? "Hide" : "Compare"} Week {olderWeek.number}
-              <span aria-hidden="true">{olderOpen ? "▴" : "▾"}</span>
-            </button>
-          </div>
-
-          {olderOpen && (
-            <div className="history-comparison-nested">
-              <HistoricalWeekComparison
-                weeks={weeks}
-                weekIndex={weekIndex - 1}
-                abbreviations={abbreviations}
-              />
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function AvailabilityWatch({ game }: { game: Game }) {
-  return (
-    <section className="injury-panel">
-      <div className="injury-panel-title">Availability Watch</div>
-      <div className="injury-grid">
-        {game.teams.map((team, teamIndex) => {
-          const availability = game.injuries[teamIndex];
-          const impactAvailability = availability.filter((item) => item.availabilityRole !== "Depth");
-          const visibleAvailability = (impactAvailability.length ? impactAvailability : availability).slice(0, 8);
-          const hiddenImpactCount = Math.max(0, impactAvailability.length - visibleAvailability.length);
-          const hiddenDepthCount = availability.filter((item) => item.availabilityRole === "Depth").length;
-          const hiddenCount = availability.length - visibleAvailability.length;
-
-          return (
-            <div className="injury-team-card" key={`${game.id}-${team.abbreviation}-availability`}>
-              <div className="injury-team-heading">
-                <TeamBadge team={team} />
-                <strong>{team.name}</strong>
-                <span>{impactAvailability.length} impact / {availability.length} flagged</span>
-              </div>
-
-              {visibleAvailability.length ? (
-                <div className="injury-list">
-                  {visibleAvailability.map((item, itemIndex) => {
-                    const roleClass = item.availabilityRole?.toLowerCase() || "roster";
-                    return (
-                      <div className="injury-line" key={`${item.player}-${itemIndex}`}>
-                        <div>
-                          <strong>{item.player}</strong>
-                          <span className="injury-position">{item.position}</span>
-                          <span className={`availability-role availability-role-${roleClass}`}>
-                            {item.availabilityRole || "Roster"}
-                          </span>
-                        </div>
-                        <div className="injury-meta">
-                          <span className="injury-status">{item.status}</span>
-                          {item.detail && <span>{item.detail}</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {hiddenCount > 0 && (
-                    <div className="injury-more">
-                      {hiddenImpactCount > 0 && `+${hiddenImpactCount} more impact player${hiddenImpactCount === 1 ? "" : "s"}`}
-                      {hiddenImpactCount > 0 && hiddenDepthCount > 0 && " · "}
-                      {hiddenDepthCount > 0 && `+${hiddenDepthCount} depth player${hiddenDepthCount === 1 ? "" : "s"} flagged`}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="injury-empty">No current availability concerns listed by Sleeper.</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </section>
+    </details>
   );
 }
 
 export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   const [weekIndex, setWeekIndex] = useState(Math.max(0, weeks.length - 1));
   const [picks, setPicks] = useState<Record<string, PickRecord>>({});
-  const [expandedComparisons, setExpandedComparisons] = useState<Record<string, boolean>>({});
-
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(PICKS_STORAGE_KEY);
-      if (saved) setPicks(JSON.parse(saved) as Record<string, PickRecord>);
-    } catch {
-      // A broken browser-storage entry should never block the tracker from loading.
-    }
+      if (saved) setPicks(sanitizePicks(JSON.parse(saved)) || {});
+    } catch { /* Browser storage may be unavailable. */ }
   }, []);
 
-  const week = weeks[weekIndex];
-  const previousWeek = weekIndex > 0 ? weeks[weekIndex - 1] : undefined;
-  const hasPreviousWeek = weekIndex > 0;
-  const hasNextWeek = weekIndex < weeks.length - 1;
-
-  function togglePick(game: Game, team: Team) {
-    const lockedSpread = team.spread;
-    if (game.completed || lockedSpread === null) return;
-
-    setPicks((current) => {
-      const next = { ...current };
-      const existing = current[game.id];
-
-      if (existing?.teamAbbreviation === team.abbreviation) {
-        delete next[game.id];
-      } else {
-        next[game.id] = {
-          teamAbbreviation: team.abbreviation,
-          lockedSpread,
-          week: week.number,
-          pickedAt: new Date().toISOString(),
-        };
-      }
-
-      try {
-        window.localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // Keep the in-memory pick even if browser storage is unavailable.
-      }
+  function updatePicks(update: (current: Record<string, PickRecord>) => Record<string, PickRecord>) {
+    setPicks(current => {
+      const next = update(current);
+      try { window.localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(next)); } catch { /* Keep the in-memory copy. */ }
       return next;
     });
   }
 
-  if (!week) {
-    return <main className="tracker-shell">No NFL data available.</main>;
-  }
-
-  const latestWeek = weekIndex === weeks.length - 1;
+  const week = weeks[weekIndex];
+  if (!week) return <main className="tracker-shell">No NFL data available.</main>;
   const analytics = summarizePicks(weeks, picks);
   const gradedCount = analytics.season.wins + analytics.season.losses + analytics.season.pushes;
+  const games = [...week.games].sort((a, b) => Number(a.completed) - Number(b.completed));
+  const upcomingCount = week.games.filter(game => !game.completed).length;
+
+  function togglePick(game: Game, team: Team) {
+    if (game.completed || team.spread === null) return;
+    const lockedSpread = team.spread;
+    updatePicks(current => {
+      const next = { ...current };
+      const existing = current[game.id];
+      if (existing?.teamAbbreviation === team.abbreviation) delete next[game.id];
+      else next[game.id] = { teamAbbreviation: team.abbreviation, lockedSpread, week: week.number, pickedAt: new Date().toISOString(), note: existing?.note, reasons: existing?.reasons };
+      return next;
+    });
+  }
+
+  function updateNote(game: Game, changes: Partial<PickRecord>) {
+    if (game.completed) return;
+    updatePicks(current => current[game.id] ? { ...current, [game.id]: { ...current[game.id], ...changes } } : current);
+  }
 
   return (
     <main className="tracker-shell">
-      <section className="analytics-panel" aria-labelledby="analytics-heading">
-        <h2 id="analytics-heading">Your season · Analytics</h2>
-        <dl className="analytics-grid">
-          <div className="analytics-stat">
-            <dt>Season record</dt>
-            <dd>{formatRecord(analytics.season)}</dd>
-            <span>Wins–losses–pushes</span>
-          </div>
-          <div className="analytics-stat">
-            <dt>ATS hit rate</dt>
-            <dd>{hitRate(analytics.season)}</dd>
-            <span>{gradedCount} graded {gradedCount === 1 ? "pick" : "picks"}</span>
-          </div>
-          {([ ["favorites", "Favorites"], ["underdogs", "Underdogs"], ["home", "Home"], ["away", "Away"] ] as const).map(([key, label]) => (
-            <div className="analytics-stat" key={key}>
-              <dt>{label}</dt>
-              <dd>{formatRecord(analytics[key])}</dd>
-              <span>{hitRate(analytics[key])} ATS</span>
-            </div>
-          ))}
-        </dl>
-        <p className="analytics-note">
-          {gradedCount === 0 && "Your record starts when a picked game goes final. "}
-          All loaded season weeks · Final scores + your locked spreads · Pushes excluded from hit rates.
-          {" "}Pick’em selections count in the season and home/away records only.
-        </p>
-      </section>
-      <section className="week-card">
-        <header className="week-header">
-          <button
-            className="week-arrow"
-            type="button"
-            disabled={!hasPreviousWeek}
-            onClick={() => hasPreviousWeek && setWeekIndex((current) => current - 1)}
-            aria-label="Previous week"
-          >
-            ‹
-          </button>
-          <h1>Week {week.number}</h1>
-          <button
-            className="week-arrow"
-            type="button"
-            disabled={!hasNextWeek}
-            onClick={() => hasNextWeek && setWeekIndex((current) => current + 1)}
-            aria-label="Next week"
-          >
-            ›
-          </button>
-          <div className={`week-status ${week.status === "Upcoming" ? "upcoming-pill" : "completed-pill"}`}>
-            {week.status === "Completed" ? "✓" : "◷"} {week.status}
-          </div>
-        </header>
-
-        <div className="tracker-scroll">
-          <div className="tracker-grid header-row">
-            <div>Teams</div>
-            <div>Score</div>
-            <div>Vegas Line</div>
-            <div>Your Pick</div>
-            <div>Q1</div>
-            <div>Q2</div>
-            <div>Q3</div>
-            <div>Q4</div>
-            <div>OT</div>
-            <div>Total Offensive Points</div>
-            <div>Total Defensive Points</div>
-          </div>
-
-          {week.games.map((game) => {
-            const canCompare = week.status === "Upcoming" && Boolean(previousWeek);
-            const comparisonOpen = Boolean(expandedComparisons[game.id]);
-            const savedPick = picks[game.id];
-            const pickGrade = gradePick(game, savedPick);
-            const weatherText = game.weather?.summary || (game.venue?.indoor ? "Indoor" : "Weather pending");
-
-            return (
-              <Fragment key={game.id}>
-                <div
-                  style={{
-                    display: "flex",
-                    minWidth: 1645,
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "9px 36px 0",
-                    color: "#516078",
-                    background: "#fff",
-                    fontSize: 12,
-                    fontWeight: 800,
-                  }}
-                >
-                  <span>{formatKickoff(game.kickoff)}</span>
-                  {latestWeek && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span>{weatherText}</span>
-                    </>
-                  )}
-                </div>
-
-                <div className="tracker-grid game-row">
-                  <div className="team-stack">
-                    {game.teams.map((team) => (
-                      <div className="team-line" key={team.abbreviation}>
-                        <TeamIdentity team={team} />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="value-stack score-stack">
-                    {game.teams.map((team) => (
-                      <strong key={team.abbreviation}>{displayValue(team.score)}</strong>
-                    ))}
-                  </div>
-
-                  <div className="value-stack spread-stack">
-                    {game.teams.map((team) => (
-                      <span
-                        key={team.abbreviation}
-                        title={game.oddsProvider ? `Source: ${game.oddsProvider}` : undefined}
-                      >
-                        {formatSpread(team.spread)}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="value-stack pick-stack">
-                    {game.teams.map((team) => {
-                      const selected = savedPick?.teamAbbreviation === team.abbreviation;
-                      return (
-                        <label className="pick-control" key={team.abbreviation}>
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            disabled={game.completed || team.spread === null}
-                            onChange={() => togglePick(game, team)}
-                            aria-label={`${selected ? "Remove pick" : "Pick"} ${team.name} ${formatSpread(team.spread)}`}
-                          />
-                          {selected && (
-                            <span className="pick-detail">
-                              Locked {formatSpread(savedPick.lockedSpread)}
-                              {pickGrade === "win" && <strong className="pick-result pick-win"> ✓ Win</strong>}
-                              {pickGrade === "loss" && <strong className="pick-result pick-loss"> ✕ Loss</strong>}
-                              {pickGrade === "push" && <strong className="pick-result pick-push"> • Push</strong>}
-                            </span>
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
-
-                  {game.quarters.map((teamPlays, periodIndex) => (
-                    <div className="quarter-box" key={`${game.id}-${periodLabel(periodIndex)}`}>
-                      {teamPlays.map((plays, teamIndex) => (
-                        <div className="quarter-team-block" key={`${game.id}-${periodLabel(periodIndex)}-team${teamIndex}`}>
-                          {plays.map((play, playIndex) => (
-                            <div className="play-line" key={`${play}-${playIndex}`}>
-                              {play}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-
-                  <div className="total-box offense-total">
-                    {game.offensivePoints.map((points, teamIndex) => (
-                      <div className="total-team-block" key={`${game.id}-offense-${teamIndex}`}>
-                        {displayValue(points)}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="total-box defense-total">
-                    {game.defensivePoints.map((points, teamIndex) => (
-                      <div className="total-team-block" key={`${game.id}-defense-${teamIndex}`}>
-                        {displayValue(points)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {canCompare && previousWeek && (
-                  <div className="comparison-drawer">
-                    <button
-                      className="comparison-toggle"
-                      type="button"
-                      aria-expanded={comparisonOpen}
-                      onClick={() =>
-                        setExpandedComparisons((current) => ({
-                          ...current,
-                          [game.id]: !current[game.id],
-                        }))
-                      }
-                    >
-                      {comparisonOpen ? "Hide" : "Compare"} Week {previousWeek.number}
-                      <span aria-hidden="true">{comparisonOpen ? "▴" : "▾"}</span>
-                    </button>
-
-                    {comparisonOpen && (
-                      <div>
-                        <AvailabilityWatch game={game} />
-                        <HistoricalWeekComparison
-                          weeks={weeks}
-                          weekIndex={weekIndex - 1}
-                          abbreviations={[game.teams[0].abbreviation, game.teams[1].abbreviation]}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Fragment>
-            );
-          })}
+      <header className="app-header">
+        <div className="brand"><span className="brand-mark" aria-hidden="true">🏈</span><div><p className="brand-title">NFL Game Tracker</p><p className="brand-subtitle">Your picks. Your playbook.</p></div></div>
+        <nav className="week-nav" aria-label="Choose a week">
+          <button className="week-arrow" type="button" disabled={weekIndex === 0} onClick={() => setWeekIndex(index => index - 1)} aria-label="Previous week">‹</button>
+          <div><h1>Week {week.number}</h1><p>{upcomingCount ? `${upcomingCount} ${upcomingCount === 1 ? "game" : "games"} left` : "All games final"} · Pacific time</p></div>
+          <button className="week-arrow" type="button" disabled={weekIndex === weeks.length - 1} onClick={() => setWeekIndex(index => index + 1)} aria-label="Next week">›</button>
+        </nav>
+      </header>
+      <details className="season-summary">
+        <summary>
+          <span><span className="eyebrow">Your season</span><strong>{formatRecord(analytics.season)}</strong></span>
+          <span className="season-rate"><strong>{hitRate(analytics.season)}</strong><span>Against the spread <span aria-hidden="true">⌄</span></span></span>
+        </summary>
+        <div className="analytics-content">
+          <h2>Your season · Analytics</h2>
+          <dl className="analytics-grid">
+            {([["favorites", "Favorites"], ["underdogs", "Underdogs"], ["home", "Home"], ["away", "Away"]] as const).map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{formatRecord(analytics[key])}</dd><span>{hitRate(analytics[key])} ATS</span></div>)}
+          </dl>
+          <p className="muted">{gradedCount} graded picks · Records are wins–losses–pushes. All loaded season weeks, using final scores and your locked spreads. Pushes excluded from hit rates. Pick’em selections count in season and home/away records only.</p>
         </div>
+      </details>
+      <section className="game-list" aria-label={`Week ${week.number} games`}>
+        {games.map((game, gameIndex) => {
+          const pick = picks[game.id];
+          const grade = gradePick(game, pick);
+          const showGroup = gameIndex === 0 || game.completed !== games[gameIndex - 1].completed;
+          return (
+            <div key={game.id}>
+              {showGroup && <h2 className="game-group-heading">{game.completed ? "Final scores" : "Up next"}<span>Week {week.number}</span></h2>}
+              <article className={`game-card ${game.completed ? "game-final" : ""}`} aria-label={`${game.teams[0].name} at ${game.teams[1].name}`}>
+                <div className="game-overview">
+                  <div className="game-meta"><span>{formatKickoff(game.kickoff)}</span><span className={`status-pill ${game.completed ? "final-pill" : ""}`}>{game.completed ? "Final" : "Upcoming"}</span></div>
+                  {weekIndex === weeks.length - 1 && <p className="weather">{game.weather?.summary || (game.venue?.indoor ? "Indoor" : "Weather pending")}</p>}
+                  <div className="team-column-labels"><span>Matchup</span><span>Score</span><span>Spread</span></div>
+                  {game.teams.map((team, index) => <div className="team-row" key={team.abbreviation}>
+                    <span className="team-badge" style={{ backgroundColor: team.color }}>{team.abbreviation}</span>
+                    <div className="team-identity"><strong>{team.name}</strong><span>{team.record || "—"} · {index === 0 ? "Away" : "Home"}</span><span>Off {team.offenseRank ? `#${team.offenseRank}` : "—"} · Def {team.defenseRank ? `#${team.defenseRank}` : "—"}</span></div>
+                    <strong className="team-score">{displayValue(team.score)}</strong><span className="team-spread">{formatSpread(team.spread)}</span>
+                  </div>)}
+                  {!game.completed && <div className="pick-buttons" role="group" aria-label="Choose your pick">
+                    {game.teams.map(team => {
+                      const selected = pick?.teamAbbreviation === team.abbreviation;
+                      return <button key={team.abbreviation} type="button" disabled={game.completed || team.spread === null} aria-pressed={selected} onClick={() => togglePick(game, team)}>{selected ? "✓ " : ""}{selected ? "Picked" : "Pick"} {team.abbreviation} {formatSpread(selected ? pick.lockedSpread : team.spread)}</button>;
+                    })}
+                  </div>}
+                  <p className="pick-status" aria-live="polite">
+                    {pick ? <>Your pick: <strong>{pick.teamAbbreviation} · Locked {formatSpread(pick.lockedSpread)}</strong>{grade && <span className={`pick-result pick-${grade}`}>{grade === "win" ? "✓ Win" : grade === "loss" ? "✕ Loss" : "• Push"}</span>}</> : game.completed ? "No pick recorded." : "Choose a team to lock your spread."}
+                  </p>
+                  {game.oddsProvider && <p className="odds-source">Current line: {game.oddsProvider}</p>}
+                </div>
+                <MatchupDetails game={game} earlierWeeks={weeks.slice(0, weekIndex)} showAvailability={weekIndex === weeks.length - 1} />
+                <PickNotes game={game} pick={pick} onChange={changes => updateNote(game, changes)} />
+                <ScoringDetails game={game} />
+              </article>
+            </div>
+          );
+        })}
       </section>
-
-      <footer className="tracker-footer">
-        <span>NFL Game Tracker</span>
-        <span>Work in progress</span>
-        <span>Go Niners ❤️</span>
-        <span className="footer-note">Live NFL data + ESPN odds + Sleeper availability + Open-Meteo weather. Picks are saved in this browser.</span>
-      </footer>
+      <footer className="tracker-footer"><span>Go Niners ❤️</span><span>ESPN game data & odds · Sleeper availability · Open-Meteo weather</span><span>Picks and notes stay together, with a browser backup.</span></footer>
     </main>
   );
 }

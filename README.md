@@ -13,6 +13,9 @@ A point spread alone doesn't tell the full story of a matchup. Evaluating a game
 
 ## What the product does
 
+- **Phone-friendly game cards:** Review matchups, make picks with large buttons, and expand comparisons without sideways scrolling.
+- **Pick reasons and notes:** Save optional Defense, Injuries, Matchup, or Gut feeling tags and a short note with a pick.
+- **Season analytics:** Review ATS record and hit rate, including favorite/underdog and home/away splits, using locked spreads.
 - **NFL game tracking:** Pulls game data from ESPN for the 2026 NFL season, including scores and quarter-by-quarter scoring details.
 - **Matchup context:** Displays team records and offense/defense scoring rankings derived from completed games.
 - **Injury and availability watch:** Surfaces player status and role context, using Sleeper player data.
@@ -44,12 +47,14 @@ Availability, odds, and weather depend on third-party data and may be incomplete
 
 ## Run locally
 
-Requires Node.js and npm.
+Requires Node.js 22.18+ (or Node.js 24) and npm.
 
 ```bash
 npm install
 npm run dev
 ```
+
+Run `npm test` for pick grading and storage validation, and `npm run build` for production checks.
 
 Open [http://localhost:3000](http://localhost:3000).
 
@@ -59,7 +64,6 @@ The dashboard can use browser storage without configuring the optional database 
 
 These are product directions, **not claims of completed features**:
 
-- Track aggregate pick performance across the season and make trends easier to review.
 - Explore richer comparisons between current matchups and prior games.
 - Connect relevant NFL news to teams, players, and upcoming games.
 - Continue refining the usability and reliability of the matchup and picks experience.
