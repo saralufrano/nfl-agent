@@ -2,17 +2,9 @@
 
 import { Fragment, useEffect, useState } from "react";
 import type { Game, Team, WeekData } from "@/lib/nfl-types";
+import { formatRecord, gradePick, hitRate, summarizePicks, type PickRecord } from "@/lib/pick-analytics";
 
 const PICKS_STORAGE_KEY = "nfl-game-tracker-picks-v1";
-
-type PickRecord = {
-  teamAbbreviation: string;
-  lockedSpread: number;
-  week: number;
-  pickedAt: string;
-};
-
-type PickGrade = "win" | "loss" | "push" | null;
 
 function TeamBadge({ team }: { team: Team }) {
   return (
@@ -69,23 +61,6 @@ function TeamIdentity({ team }: { team: Team }) {
       </span>
     </>
   );
-}
-
-function gradePick(game: Game, pick: PickRecord | undefined): PickGrade {
-  if (!pick || !game.completed) return null;
-
-  const pickedIndex = game.teams.findIndex((team) => team.abbreviation === pick.teamAbbreviation);
-  if (pickedIndex === -1) return null;
-
-  const opponentIndex = pickedIndex === 0 ? 1 : 0;
-  const pickedScore = game.teams[pickedIndex].score;
-  const opponentScore = game.teams[opponentIndex].score;
-  if (pickedScore === null || opponentScore === null) return null;
-
-  const adjustedScore = pickedScore + pick.lockedSpread;
-  if (adjustedScore > opponentScore) return "win";
-  if (adjustedScore < opponentScore) return "loss";
-  return "push";
 }
 
 function findPreviousGame(week: WeekData | undefined, abbreviation: string): Game | undefined {
@@ -352,9 +327,38 @@ export function Dashboard({ weeks }: { weeks: WeekData[] }) {
   }
 
   const latestWeek = weekIndex === weeks.length - 1;
+  const analytics = summarizePicks(weeks, picks);
+  const gradedCount = analytics.season.wins + analytics.season.losses + analytics.season.pushes;
 
   return (
     <main className="tracker-shell">
+      <section className="analytics-panel" aria-labelledby="analytics-heading">
+        <h2 id="analytics-heading">Your season · Analytics</h2>
+        <dl className="analytics-grid">
+          <div className="analytics-stat">
+            <dt>Season record</dt>
+            <dd>{formatRecord(analytics.season)}</dd>
+            <span>Wins–losses–pushes</span>
+          </div>
+          <div className="analytics-stat">
+            <dt>ATS hit rate</dt>
+            <dd>{hitRate(analytics.season)}</dd>
+            <span>{gradedCount} graded {gradedCount === 1 ? "pick" : "picks"}</span>
+          </div>
+          {([ ["favorites", "Favorites"], ["underdogs", "Underdogs"], ["home", "Home"], ["away", "Away"] ] as const).map(([key, label]) => (
+            <div className="analytics-stat" key={key}>
+              <dt>{label}</dt>
+              <dd>{formatRecord(analytics[key])}</dd>
+              <span>{hitRate(analytics[key])} ATS</span>
+            </div>
+          ))}
+        </dl>
+        <p className="analytics-note">
+          {gradedCount === 0 && "Your record starts when a picked game goes final. "}
+          All loaded season weeks · Final scores + your locked spreads · Pushes excluded from hit rates.
+          {" "}Pick’em selections count in the season and home/away records only.
+        </p>
+      </section>
       <section className="week-card">
         <header className="week-header">
           <button

@@ -2,20 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Dashboard } from "@/components/dashboard";
-import type { Game, WeekData } from "@/lib/nfl-types";
+import { gradePick, type PickRecord } from "@/lib/pick-analytics";
+import type { WeekData } from "@/lib/nfl-types";
 
 const PICKS_STORAGE_KEY = "nfl-game-tracker-picks-v1";
 const SYNC_INTERVAL_MS = 750;
-
-type PickResult = "win" | "loss" | "push";
-
-type PickRecord = {
-  teamAbbreviation: string;
-  lockedSpread: number;
-  week: number;
-  pickedAt: string;
-  result?: PickResult | null;
-};
 
 type PickMap = Record<string, PickRecord>;
 
@@ -41,23 +32,6 @@ function writeBrowserPicks(picks: PickMap) {
   } catch {
     // The dashboard can still run in memory if browser storage is unavailable.
   }
-}
-
-function gradePick(game: Game, pick: PickRecord): PickResult | null {
-  if (!game.completed) return null;
-
-  const pickedIndex = game.teams.findIndex((team) => team.abbreviation === pick.teamAbbreviation);
-  if (pickedIndex === -1) return null;
-
-  const opponentIndex = pickedIndex === 0 ? 1 : 0;
-  const pickedScore = game.teams[pickedIndex].score;
-  const opponentScore = game.teams[opponentIndex].score;
-  if (pickedScore === null || opponentScore === null) return null;
-
-  const adjustedScore = pickedScore + pick.lockedSpread;
-  if (adjustedScore > opponentScore) return "win";
-  if (adjustedScore < opponentScore) return "loss";
-  return "push";
 }
 
 function addFinalResults(weeks: WeekData[], picks: PickMap) {
